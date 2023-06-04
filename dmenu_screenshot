@@ -1,0 +1,17 @@
+#!/bin/sh
+
+dir=~/images
+
+if [ -f "$dir"/screenshot"$(date +"%d%b%g")" ]; then
+	datetime=$(date +"%d%b%g-%T")
+else
+	datetime=$(date +"%d%b%g")
+fi
+
+case "$(printf "%s\n" "Whole Screen" "Box Draw" | dmenu -i)" in
+	"Whole Screen") scrot $dir/screenshot"$datetime";;
+	"Box Draw") scrot -s $dir/screenshot"$datetime";;
+	*) false;;
+esac
+
+exit "$?"

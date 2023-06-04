@@ -1,0 +1,36 @@
+#!/bin/sh
+# For GNU systems
+
+app="$(printf '%s\n' \
+	Browser \
+	RSS \
+	Sound \
+	Networking \
+	'Virtual Machines' \
+	Passwords \
+	Work \
+	System | dmenu -i -l $DMENULINENUM)"
+
+case "$app" in
+	"Browser") $BROWSER;;
+	"RSS") dmenu_rss;;
+	"Terminal") tabbed -r 2 st -w '';;
+	"Sound") st -w '' alsamixer;;
+	"Networking") st -w '' doas nmtui;;
+	"Toggle VPN");;
+	"Virtual Machines") st -e doas vm.sh "$(for vmdir in /var/vm/*; do
+		[ -d $vmdir ] && basename $vmdir
+	done | dmenu -i -p 'Guest Operating System:')" delay;;
+	"GNS3/Packet Tracer") case "$(printf '%s\n' GNS3 'Packet Tracer' | dmenu -i)" in
+		"GNS3");;
+		"Packet Tracer") packettracer;;
+	esac;;
+	"Passwords") dmenu_password;;
+	"System") case "$(printf '%s\n' 'Screenshot' 'Lock Screen' 'Logout' 'Reboot' 'Shutdown' | dmenu -i -l $DMENULINENUM)" in
+		"Screenshot") dmenu_screenshot;;
+		"Lock Screen") slock;;
+		"Logout") pkill -KILL -u "$(whoami)";;
+		"Reboot") doas shutdown -r now;;
+		"Shutdown") doas shutdown -P now;;
+	esac;;
+esac
