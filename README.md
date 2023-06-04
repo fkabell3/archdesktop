@@ -8,7 +8,7 @@ Arch Linux installation script with many suckless.org utilities. This setup trie
 * Terminal emulation has the ability to open files and links easily
 * Virtual machines can be spawned trivally with a few keystrokes
 
-All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal. A transparency theme as been applied to get that nice look often seen in Apple Software.<br>
+All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme as been applied to get that nice look often seen in Apple Software.<br>
 
 Many of the companion scripts will not work alone; they must either be used on the system setup with archinstall.sh, or edited to become usable on your system. The most notable offenders are:
 
