@@ -4,8 +4,9 @@ Arch Linux installation script with many suckless.org utilities. This setup trie
 
 * RSS/YouTube subscriptions are handled with sfeedrc
 * Password management is dealt with files, directories, and xclip
-* Screenshotting involves only a few key strokes to select Whole Screen or Box Draw, and saves the file with a useful name
+* Easy screenshotting
 * Terminal emulation has the ability to open files and links easily
+* Virtual machines can be spawned trivally with a few keystrokes
 
 All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal. A transparency theme as been applied to get that nice look often seen in Apple Software.<br>
 
