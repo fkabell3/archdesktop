@@ -1,4 +1,4 @@
-# shscripts
+# archdesktop
 
 This repo contains my desktop enviroment which makes heavy usage of suckless.org utilities such as dmenu(1) and dwm(1).
 Some of the scripts expect custom variables to be exported, such as $DMENULINENUM and $BROWSER.
