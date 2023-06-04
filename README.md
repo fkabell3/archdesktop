@@ -1,6 +1,6 @@
 # archdesktop
 
-Arch Linux installation script with many suckless.org utilities. This setup tries to utilize simple tools and scripts in leiu of more complicated alternatives. For instance,<br>
+Arch Linux installation script with many suckless.org utilities. This setup tries to utilize simple tools and scripts in lieu of more complicated alternatives. For instance,<br>
 
 * RSS/YouTube subscriptions are handled with sfeedrc
 * Password management is dealt with files, directories, and xclip
