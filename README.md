@@ -4,7 +4,7 @@ Arch Linux installation script with many suckless.org utilities. This setup trie
 
 * RSS/YouTube subscriptions are handled with sfeedrc
 * Password management is dealt with files, directories, and xclip
-* Easy screenshotting
+* Quick screenshotting, network & sound configuration (st + nmtui/alsamixer)
 * Terminal emulation has the ability to open files and links easily
 * Virtual machines can be spawned trivally with a few keystrokes
 
