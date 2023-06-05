@@ -20,7 +20,7 @@ export QT_DEVICE_PIXEL_RATIO
 
 # Librewolf/Firefox font/scale settings can be changed with 
 # about:config -> layout.css.devPixelsPerPx
-BROWSER="librewolf -P default"
+BROWSER=librewolf
 export BROWSER
 
 DMENULINENUM=34
