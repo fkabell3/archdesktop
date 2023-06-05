@@ -1,4 +1,4 @@
-# "$HOME"/.bashrc
+# /etc/bash.bashrc
 
 case "$-" in
 	*i*);;
