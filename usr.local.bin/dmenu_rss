@@ -1,4 +1,5 @@
 #!/bin/sh
+# Public domain - Frederick Key Abell III
 
 dir=~/.sfeed
 lsfeed() {
@@ -21,8 +22,7 @@ while true; do
 		selection="$(lsfeed | awk -F '\t' '{print $1}'| \
 			dmenu -i -l $DMENULINENUM)"
 		[ -z "$selection" ] && break
-		# Don't put multi-word $BROWSER in quotes
-		$BROWSER "$(lsfeed | grep "$selection" | \
+		eval "$BROWSER $(lsfeed | grep "$selection" | \
 			awk -F '\t' '{print $2}')" & exit 0
 	done
 done
