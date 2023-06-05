@@ -1,5 +1,11 @@
 #!/bin/sh
+# /etc/X11/xdm/Xsetup_0
 
+# Change background image; pick an automatic default
 xwallpaper --zoom $(find /usr/local/share/backgrounds/ -type f | head -n 1)
+
+# Swap Caps Lock & Escape keys (mainly for vi-based editors)
 setxkbmap -option caps:swapescape
+
+# Hide cursor when typing
 xbanish &

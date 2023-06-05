@@ -1,3 +1,4 @@
+! /etc/X11/xdm/Xresources
 ! What takes up most of the login window real estate
 *Background: #000000
 ! Add a border to the login window
