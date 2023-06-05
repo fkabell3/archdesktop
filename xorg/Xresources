@@ -1,4 +1,5 @@
 ! /etc/X11/xdm/Xresources
+
 ! What takes up most of the login window real estate
 *Background: #000000
 ! Add a border to the login window
@@ -11,7 +12,7 @@ xlogin*greetFace: Helvetica-24:bold:italic
 
 ! Color of input feilds
 xlogin*Foreground: white
-! Username/password input font
+! Login/Password character input font
 xlogin*face: Helvetica-18
 ! Color of said font
 xlogin*foreground: black
