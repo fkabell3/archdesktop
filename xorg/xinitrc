@@ -11,7 +11,7 @@ fi
 picom --blur-method box &
 statusbar.sh &
 
-# Start off in floating mode
+# Start off in floating layout
 #(sleep .3; xdotool key super+f) &
 
 # Changes font size of programs such as packettracer and wireshark
