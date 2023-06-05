@@ -8,8 +8,7 @@ app="$(printf '%s\n' \
 	Networking \
 	'Virtual Machines' \
 	Passwords \
-	Work \
-	System | dmenu -i -l $DMENULINENUM)"
+	System | dmenu -i -l "$DMENULINENUM")"
 
 case "$app" in
 	"Browser") $BROWSER;;
@@ -18,15 +17,15 @@ case "$app" in
 	"Sound") st -w '' alsamixer;;
 	"Networking") st -w '' doas nmtui;;
 	"Toggle VPN");;
-	"Virtual Machines") st -e doas vm.sh "$(for vmdir in /var/vm/*; do
-		[ -d $vmdir ] && basename $vmdir
+	"Virtual Machines") st -e doas vm.sh "$(for "vmdir" in /var/vm/*; do
+		[ -d $vmdir ] && basename "$vmdir"
 	done | dmenu -i -p 'Guest Operating System:')" delay;;
 	"GNS3/Packet Tracer") case "$(printf '%s\n' GNS3 'Packet Tracer' | dmenu -i)" in
 		"GNS3");;
 		"Packet Tracer") packettracer;;
 	esac;;
 	"Passwords") dmenu_password;;
-	"System") case "$(printf '%s\n' 'Screenshot' 'Lock Screen' 'Logout' 'Reboot' 'Shutdown' | dmenu -i -l $DMENULINENUM)" in
+	"System") case "$(printf '%s\n' 'Screenshot' 'Lock Screen' 'Logout' 'Reboot' 'Shutdown' | dmenu -i -l "$DMENULINENUM")" in
 		"Screenshot") dmenu_screenshot;;
 		"Lock Screen") slock;;
 		"Logout") pkill -KILL -u "$(whoami)";;
