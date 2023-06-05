@@ -6,6 +6,7 @@ Arch Linux installation script with many suckless.org utilities. This setup trie
 * Password management is dealt with files, directories, and xclip
 * Quick screenshotting, and network/sound configuration
 * Terminal emulation has the ability to open files and links easily
+* doas instead of sudo, /bin/sh -> dash
 * Virtual machines can be spawned trivally with a few keystrokes
 
 All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme as been applied to get that nice look often seen in Apple software.<br>
