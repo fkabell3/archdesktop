@@ -1,0 +1,28 @@
+#!/bin/sh
+
+if [ -d /etc/X11/xinit/xinitrc.d ] ; then
+ for file in /etc/X11/xinit/xinitrc.d/?*.sh ; do
+  [ -x "$file" ] && . "$file"
+ done
+ unset file
+fi
+
+picom --blur-method box &
+statusbar.sh &
+
+# Start off in floating mode
+#(sleep .3; xdotool key super+f) &
+
+# Changes font size of programs such as packettracer and wireshark
+QT_DEVICE_PIXEL_RATIO=2
+export QT_DEVICE_PIXEL_RATIO
+
+# Librewolf/Firefox font/scale settings can be changed with 
+# about:config -> layout.css.devPixelsPerPx
+BROWSER="librewolf -P default"
+export BROWSER
+
+DMENULINENUM=34
+export DMENULINENUM
+
+exec dwm

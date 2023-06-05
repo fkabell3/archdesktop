@@ -1,0 +1,5 @@
+#!/bin/sh
+
+xwallpaper --zoom $(find /usr/local/share/backgrounds/ -type f | head -n 1)
+setxkbmap -option caps:swapescape
+xbanish &
