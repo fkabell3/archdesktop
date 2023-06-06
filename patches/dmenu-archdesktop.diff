@@ -1,0 +1,434 @@
+diff -ruN a/config.def.h b/config.def.h
+--- a/config.def.h	2023-06-05 22:57:43.726232776 -0500
++++ b/config.def.h	2023-06-05 22:56:32.989567813 -0500
+@@ -2,17 +2,25 @@
+ /* Default settings; can be overriden by command line. */
+ 
+ static int topbar = 1;                      /* -b  option; if 0, dmenu appears at bottom     */
++static const unsigned int alpha = 0x55;
+ /* -fn option overrides fonts[0]; default X11 font or font set */
+ static const char *fonts[] = {
+-	"monospace:size=10"
++	"SF Mono:size=25"
+ };
+ static const char *prompt      = NULL;      /* -p  option; prompt to the left of input field */
+ static const char *colors[SchemeLast][2] = {
+ 	/*     fg         bg       */
+-	[SchemeNorm] = { "#bbbbbb", "#222222" },
+-	[SchemeSel] = { "#eeeeee", "#005577" },
+-	[SchemeOut] = { "#000000", "#00ffff" },
++	[SchemeNorm] = { "#ffffff", "#222222" },
++	[SchemeSel] = { "#eeeeee", "#000000" },
++	[SchemeOut] = { "#000000", "#ffffff" },
+ };
++
++static const unsigned int alphas[SchemeLast][2] = {
++	[SchemeNorm] = { OPAQUE, alpha },
++	[SchemeSel] = { OPAQUE, alpha },
++	[SchemeOut] = { OPAQUE, alpha },
++};
++
+ /* -l option; if nonzero, dmenu uses vertical list with given number of lines */
+ static unsigned int lines      = 0;
+ 
+@@ -21,3 +29,5 @@
+  * for example: " /?\"&[]"
+  */
+ static const char worddelimiters[] = " ";
++
++static unsigned int border_width = 0;
+diff -ruN a/config.mk b/config.mk
+--- a/config.mk	2023-06-05 22:57:43.726232776 -0500
++++ b/config.mk	2023-06-05 22:56:32.989567813 -0500
+@@ -21,7 +21,7 @@
+ 
+ # includes and libs
+ INCS = -I$(X11INC) -I$(FREETYPEINC)
+-LIBS = -L$(X11LIB) -lX11 $(XINERAMALIBS) $(FREETYPELIBS)
++LIBS = -L$(X11LIB) -lX11 $(XINERAMALIBS) $(FREETYPELIBS) -lXrender
+ 
+ # flags
+ CPPFLAGS = -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=200809L -DVERSION=\"$(VERSION)\" $(XINERAMAFLAGS)
+diff -ruN a/dmenu.c b/dmenu.c
+--- a/dmenu.c	2023-06-05 22:57:43.726232776 -0500
++++ b/dmenu.c	2023-06-05 22:56:32.989567813 -0500
+@@ -10,6 +10,7 @@
+ 
+ #include <X11/Xlib.h>
+ #include <X11/Xatom.h>
++#include <X11/Xproto.h>
+ #include <X11/Xutil.h>
+ #ifdef XINERAMA
+ #include <X11/extensions/Xinerama.h>
+@@ -25,6 +26,8 @@
+ #define LENGTH(X)             (sizeof X / sizeof X[0])
+ #define TEXTW(X)              (drw_fontset_getwidth(drw, (X)) + lrpad)
+ 
++#define OPAQUE                0xffU
++
+ /* enums */
+ enum { SchemeNorm, SchemeSel, SchemeOut, SchemeLast }; /* color schemes */
+ 
+@@ -53,10 +56,16 @@
+ static Drw *drw;
+ static Clr *scheme[SchemeLast];
+ 
++static int useargb = 0;
++static Visual *visual;
++static int depth;
++static Colormap cmap;
++
+ #include "config.h"
+ 
+ static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
+ static char *(*fstrstr)(const char *, const char *) = strstr;
++static void xinitvisual();
+ 
+ static unsigned int
+ textw_clamp(const char *str, unsigned int n)
+@@ -169,9 +178,11 @@
+ 	}
+ 
+ 	if (lines > 0) {
+-		/* draw vertical list */
+-		for (item = curr; item != next; item = item->right)
++		/* draw vertical list, hide empty lines */
++		int i = 0;
++		for (item = curr; item != next; item = item->right, i++)
+ 			drawitem(item, x, y += bh, mw - x);
++		XResizeWindow(dpy, win, mw, (i + 1) * bh);
+ 	} else if (matches) {
+ 		/* draw horizontal list */
+ 		x += inputw;
+@@ -529,6 +540,119 @@
+ }
+ 
+ static void
++buttonpress(XEvent *e)
++{
++	struct item *item;
++	XButtonPressedEvent *ev = &e->xbutton;
++	int x = 0, y = 0, h = bh, w;
++
++	if (ev->window != win)
++		return;
++
++	/* right-click: exit */
++	if (ev->button == Button3)
++		exit(1);
++
++	if (prompt && *prompt)
++		x += promptw;
++
++	/* input field */
++	w = (lines > 0 || !matches) ? mw - x : inputw;
++
++	/* left-click on input: clear input,
++	 * NOTE: if there is no left-arrow the space for < is reserved so
++	 *       add that to the input width */
++	if (ev->button == Button1 &&
++	   ((lines <= 0 && ev->x >= 0 && ev->x <= x + w +
++	   ((!prev || !curr->left) ? TEXTW("<") : 0)) ||
++	   (lines > 0 && ev->y >= y && ev->y <= y + h))) {
++		insert(NULL, -cursor);
++		drawmenu();
++		return;
++	}
++	/* middle-mouse click: paste selection */
++	if (ev->button == Button2) {
++		XConvertSelection(dpy, (ev->state & ShiftMask) ? clip : XA_PRIMARY,
++		                  utf8, utf8, win, CurrentTime);
++		drawmenu();
++		return;
++	}
++	/* scroll up */
++	if (ev->button == Button4 && prev) {
++		sel = curr = prev;
++		calcoffsets();
++		drawmenu();
++		return;
++	}
++	/* scroll down */
++	if (ev->button == Button5 && next) {
++		sel = curr = next;
++		calcoffsets();
++		drawmenu();
++		return;
++	}
++	if (ev->button != Button1)
++		return;
++	if (ev->state & ~ControlMask)
++		return;
++	if (lines > 0) {
++		/* vertical list: (ctrl)left-click on item */
++		w = mw - x;
++		for (item = curr; item != next; item = item->right) {
++			y += h;
++			if (ev->y >= y && ev->y <= (y + h)) {
++				puts(item->text);
++				if (!(ev->state & ControlMask))
++					exit(0);
++				sel = item;
++				if (sel) {
++					sel->out = 1;
++					drawmenu();
++				}
++				return;
++			}
++		}
++	} else if (matches) {
++		/* left-click on left arrow */
++		x += inputw;
++		w = TEXTW("<");
++		if (prev && curr->left) {
++			if (ev->x >= x && ev->x <= x + w) {
++				sel = curr = prev;
++				calcoffsets();
++				drawmenu();
++				return;
++			}
++		}
++		/* horizontal list: (ctrl)left-click on item */
++		for (item = curr; item != next; item = item->right) {
++			x += w;
++			w = MIN(TEXTW(item->text), mw - x - TEXTW(">"));
++			if (ev->x >= x && ev->x <= x + w) {
++				puts(item->text);
++				if (!(ev->state & ControlMask))
++					exit(0);
++				sel = item;
++				if (sel) {
++					sel->out = 1;
++					drawmenu();
++				}
++				return;
++			}
++		}
++		/* left-click on right arrow */
++		w = TEXTW(">");
++		x = mw - w;
++		if (next && ev->x >= x && ev->x <= x + w) {
++			sel = curr = next;
++			calcoffsets();
++			drawmenu();
++			return;
++		}
++	}
++}
++
++static void
+ paste(void)
+ {
+ 	char *p, *q;
+@@ -587,6 +711,9 @@
+ 				break;
+ 			cleanup();
+ 			exit(1);
++		case ButtonPress:
++			buttonpress(&ev);
++			break;
+ 		case Expose:
+ 			if (ev.xexpose.count == 0)
+ 				drw_map(drw, win, 0, 0, mw, mh);
+@@ -628,7 +755,7 @@
+ #endif
+ 	/* init appearance */
+ 	for (j = 0; j < SchemeLast; j++)
+-		scheme[j] = drw_scm_create(drw, colors[j], 2);
++		scheme[j] = drw_scm_create(drw, colors[j], alphas[i], 2);
+ 
+ 	clip = XInternAtom(dpy, "CLIPBOARD",   False);
+ 	utf8 = XInternAtom(dpy, "UTF8_STRING", False);
+@@ -666,6 +793,7 @@
+ 		x = info[i].x_org;
+ 		y = info[i].y_org + (topbar ? 0 : info[i].height - mh);
+ 		mw = info[i].width;
++
+ 		XFree(info);
+ 	} else
+ #endif
+@@ -683,11 +811,13 @@
+ 
+ 	/* create menu window */
+ 	swa.override_redirect = True;
+-	swa.background_pixel = scheme[SchemeNorm][ColBg].pixel;
+-	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
+-	win = XCreateWindow(dpy, root, x, y, mw, mh, 0,
+-	                    CopyFromParent, CopyFromParent, CopyFromParent,
+-	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
++	swa.background_pixel = 0;
++	swa.border_pixel = 0;
++	swa.colormap = cmap;
++	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask | ButtonPressMask;
++	win = XCreateWindow(dpy, parentwin, x, y, mw, mh, border_width,
++			    depth, CopyFromParent, visual,
++	                    CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWColormap | CWEventMask, &swa);
+ 	XSetClassHint(dpy, win, &ch);
+ 
+ 
+@@ -773,7 +903,8 @@
+ 	if (!XGetWindowAttributes(dpy, parentwin, &wa))
+ 		die("could not get embedding window attributes: 0x%lx",
+ 		    parentwin);
+-	drw = drw_create(dpy, screen, root, wa.width, wa.height);
++	xinitvisual();
++	drw = drw_create(dpy, screen, root, wa.width, wa.height, visual, depth, cmap);
+ 	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
+ 		die("no fonts could be loaded.");
+ 	lrpad = drw->fonts->h;
+@@ -795,3 +926,40 @@
+ 
+ 	return 1; /* unreachable */
+ }
++
++ void
++xinitvisual()
++{
++	XVisualInfo *infos;
++	XRenderPictFormat *fmt;
++	int nitems;
++	int i;
++
++	XVisualInfo tpl = {
++		.screen = screen,
++		.depth = 32,
++		.class = TrueColor
++	};
++	long masks = VisualScreenMask | VisualDepthMask | VisualClassMask;
++
++	infos = XGetVisualInfo(dpy, masks, &tpl, &nitems);
++	visual = NULL;
++	for(i = 0; i < nitems; i ++) {
++		fmt = XRenderFindVisualFormat(dpy, infos[i].visual);
++		if (fmt->type == PictTypeDirect && fmt->direct.alphaMask) {
++			visual = infos[i].visual;
++			depth = infos[i].depth;
++			cmap = XCreateColormap(dpy, root, visual, AllocNone);
++			useargb = 1;
++			break;
++		}
++	}
++
++	XFree(infos);
++
++	if (! visual) {
++		visual = DefaultVisual(dpy, screen);
++		depth = DefaultDepth(dpy, screen);
++		cmap = DefaultColormap(dpy, screen);
++	}
++}
+diff -ruN a/drw.c b/drw.c
+--- a/drw.c	2023-06-05 22:57:43.726232776 -0500
++++ b/drw.c	2023-06-05 22:56:32.989567813 -0500
+@@ -61,7 +61,7 @@
+ }
+ 
+ Drw *
+-drw_create(Display *dpy, int screen, Window root, unsigned int w, unsigned int h)
++drw_create(Display *dpy, int screen, Window root, unsigned int w, unsigned int h, Visual *visual, unsigned int depth, Colormap cmap)
+ {
+ 	Drw *drw = ecalloc(1, sizeof(Drw));
+ 
+@@ -70,8 +70,11 @@
+ 	drw->root = root;
+ 	drw->w = w;
+ 	drw->h = h;
+-	drw->drawable = XCreatePixmap(dpy, root, w, h, DefaultDepth(dpy, screen));
+-	drw->gc = XCreateGC(dpy, root, 0, NULL);
++	drw->visual = visual;
++	drw->depth = depth;
++	drw->cmap = cmap;
++	drw->drawable = XCreatePixmap(dpy, root, w, h, depth);
++	drw->gc = XCreateGC(dpy, drw->drawable, 0, NULL);
+ 	XSetLineAttributes(dpy, drw->gc, 1, LineSolid, CapButt, JoinMiter);
+ 
+ 	return drw;
+@@ -87,7 +90,7 @@
+ 	drw->h = h;
+ 	if (drw->drawable)
+ 		XFreePixmap(drw->dpy, drw->drawable);
+-	drw->drawable = XCreatePixmap(drw->dpy, drw->root, w, h, DefaultDepth(drw->dpy, drw->screen));
++	drw->drawable = XCreatePixmap(drw->dpy, drw->root, w, h, drw->depth);
+ }
+ 
+ void
+@@ -181,21 +184,22 @@
+ }
+ 
+ void
+-drw_clr_create(Drw *drw, Clr *dest, const char *clrname)
++drw_clr_create(Drw *drw, Clr *dest, const char *clrname, unsigned int alpha)
+ {
+ 	if (!drw || !dest || !clrname)
+ 		return;
+ 
+-	if (!XftColorAllocName(drw->dpy, DefaultVisual(drw->dpy, drw->screen),
+-	                       DefaultColormap(drw->dpy, drw->screen),
++	if (!XftColorAllocName(drw->dpy, drw->visual, drw->cmap,
+ 	                       clrname, dest))
+ 		die("error, cannot allocate color '%s'", clrname);
++
++	dest->pixel = (dest->pixel & 0x00ffffffU) | (alpha << 24);
+ }
+ 
+ /* Wrapper to create color schemes. The caller has to call free(3) on the
+  * returned color scheme when done using it. */
+ Clr *
+-drw_scm_create(Drw *drw, const char *clrnames[], size_t clrcount)
++drw_scm_create(Drw *drw, const char *clrnames[], const unsigned int alphas[], size_t clrcount)
+ {
+ 	size_t i;
+ 	Clr *ret;
+@@ -205,7 +209,7 @@
+ 		return NULL;
+ 
+ 	for (i = 0; i < clrcount; i++)
+-		drw_clr_create(drw, &ret[i], clrnames[i]);
++		drw_clr_create(drw, &ret[i], clrnames[i], alphas[i]);
+ 	return ret;
+ }
+ 
+@@ -263,9 +267,7 @@
+ 	} else {
+ 		XSetForeground(drw->dpy, drw->gc, drw->scheme[invert ? ColFg : ColBg].pixel);
+ 		XFillRectangle(drw->dpy, drw->drawable, drw->gc, x, y, w, h);
+-		d = XftDrawCreate(drw->dpy, drw->drawable,
+-		                  DefaultVisual(drw->dpy, drw->screen),
+-		                  DefaultColormap(drw->dpy, drw->screen));
++		d = XftDrawCreate(drw->dpy, drw->drawable, drw->visual, drw->cmap);
+ 		x += lpad;
+ 		w -= lpad;
+ 	}
+diff -ruN a/drw.h b/drw.h
+--- a/drw.h	2023-06-05 22:57:43.726232776 -0500
++++ b/drw.h	2023-06-05 22:56:32.989567813 -0500
+@@ -20,6 +20,9 @@
+ 	Display *dpy;
+ 	int screen;
+ 	Window root;
++	Visual *visual;
++	unsigned int depth;
++	Colormap cmap;
+ 	Drawable drawable;
+ 	GC gc;
+ 	Clr *scheme;
+@@ -27,7 +30,7 @@
+ } Drw;
+ 
+ /* Drawable abstraction */
+-Drw *drw_create(Display *dpy, int screen, Window win, unsigned int w, unsigned int h);
++Drw *drw_create(Display *dpy, int screen, Window win, unsigned int w, unsigned int h, Visual*, unsigned int, Colormap);
+ void drw_resize(Drw *drw, unsigned int w, unsigned int h);
+ void drw_free(Drw *drw);
+ 
+@@ -39,8 +42,8 @@
+ void drw_font_getexts(Fnt *font, const char *text, unsigned int len, unsigned int *w, unsigned int *h);
+ 
+ /* Colorscheme abstraction */
+-void drw_clr_create(Drw *drw, Clr *dest, const char *clrname);
+-Clr *drw_scm_create(Drw *drw, const char *clrnames[], size_t clrcount);
++void drw_clr_create(Drw *drw, Clr *dest, const char *clrname, unsigned int alpha);
++Clr *drw_scm_create(Drw *drw, const char *clrnames[], const unsigned int alphas[], size_t clrcount);
+ 
+ /* Cursor abstraction */
+ Cur *drw_cur_create(Drw *drw, int shape);

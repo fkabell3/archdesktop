@@ -1,0 +1,21 @@
+diff -ruN a/config.def.h b/config.def.h
+--- a/config.def.h	2023-06-05 23:33:13.632848190 -0500
++++ b/config.def.h	2023-06-05 23:32:25.502849357 -0500
+@@ -1,12 +1,12 @@
+-static const char *background_color = "#3e3e3e";
+-static const char *border_color = "#ececec";
+-static const char *font_color = "#ececec";
+-static const char *font_pattern = "monospace:size=10";
++static const char *background_color = "#ffffff";
++static const char *border_color = "#000000";
++static const char *font_color = "#000000";
++static const char *font_pattern = "SD Mono:size=20";
+ static const unsigned line_spacing = 5;
+ static const unsigned int padding = 15;
+ 
+ static const unsigned int width = 450;
+-static const unsigned int border_size = 2;
++static const unsigned int border_size = 1;
+ static const unsigned int pos_x = 30;
+ static const unsigned int pos_y = 60;
+ 

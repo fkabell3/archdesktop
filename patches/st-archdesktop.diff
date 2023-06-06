@@ -1,0 +1,1094 @@
+diff -ruN a/autocomplete.h b/autocomplete.h
+--- a/autocomplete.h	1969-12-31 18:00:00.000000000 -0600
++++ b/autocomplete.h	2023-06-06 00:16:42.242785368 -0500
+@@ -0,0 +1,16 @@
++# ifndef __ST_AUTOCOMPLETE_H
++# define __ST_AUTOCOMPLETE_H
++
++enum {
++	ACMPL_DEACTIVATE,
++	ACMPL_WORD,
++	ACMPL_WWORD,
++	ACMPL_FUZZY_WORD,
++	ACMPL_FUZZY_WWORD,
++	ACMPL_FUZZY,
++	ACMPL_SUFFIX,
++	ACMPL_SURROUND,
++	ACMPL_UNDO,
++};
++
++# endif // __ST_AUTOCOMPLETE_H
+diff -ruN a/config.def.h b/config.def.h
+--- a/config.def.h	2023-06-06 00:22:32.209443612 -0500
++++ b/config.def.h	2023-06-06 00:20:57.079445899 -0500
+@@ -5,7 +5,7 @@
+  *
+  * font: see http://freedesktop.org/software/fontconfig/fontconfig-user.html
+  */
+-static char *font = "Liberation Mono:pixelsize=12:antialias=true:autohint=true";
++static char *font = "SF Mono:pixelsize=25:antialias=true:autohint=true";
+ static int borderpx = 2;
+ 
+ /*
+@@ -135,13 +135,20 @@
+ static unsigned int defaultrcs = 257;
+ 
+ /*
+- * Default shape of cursor
+- * 2: Block ("█")
+- * 4: Underline ("_")
+- * 6: Bar ("|")
+- * 7: Snowman ("☃")
++ * https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Ps-SP-q.1D81
++ * Default style of cursor
++ * 0: blinking block
++ * 1: blinking block (default)
++ * 2: steady block ("█")
++ * 3: blinking underline
++ * 4: steady underline ("_")
++ * 5: blinking bar
++ * 6: steady bar ("|")
++ * 7: blinking st cursor
++ * 8: steady st cursor
+  */
+-static unsigned int cursorshape = 2;
++static unsigned int cursorstyle = 1;
++static Rune stcursor = 0x2603; /* snowman ("☃") */
+ 
+ /*
+  * Default columns and rows numbers
+@@ -170,6 +177,8 @@
+  */
+ static uint forcemousemod = ShiftMask;
+ 
++#include "autocomplete.h"
++
+ /*
+  * Internal mouse shortcuts.
+  * Beware that overloading Button1 will disable the selection.
+@@ -187,8 +196,15 @@
+ #define MODKEY Mod1Mask
+ #define TERMMOD (ControlMask|ShiftMask)
+ 
++#define ACMPL_MOD ControlMask|Mod1Mask
++
++static char *opencmd[] = { "/bin/sh", "-c", "openurl.sh", "externalpipe", NULL };
++static char *editscreencmd[] = { "/bin/sh", "-c", "editscreen.sh", "externalpipe", NULL };
++
+ static Shortcut shortcuts[] = {
+ 	/* mask                 keysym          function        argument */
++	{ TERMMOD,		XK_U,		externalpipe,	{.v = opencmd } },
++	{ TERMMOD,		XK_I,		externalpipe,	{.v = editscreencmd } },
+ 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },
+ 	{ ControlMask,          XK_Print,       toggleprinter,  {.i =  0} },
+ 	{ ShiftMask,            XK_Print,       printscreen,    {.i =  0} },
+@@ -201,6 +217,14 @@
+ 	{ TERMMOD,              XK_Y,           selpaste,       {.i =  0} },
+ 	{ ShiftMask,            XK_Insert,      selpaste,       {.i =  0} },
+ 	{ TERMMOD,              XK_Num_Lock,    numlock,        {.i =  0} },
++	{ ACMPL_MOD,            XK_slash,       autocomplete,   { .i = ACMPL_WORD        } },
++	{ ACMPL_MOD,            XK_period,      autocomplete,   { .i = ACMPL_FUZZY_WORD  } },
++	{ ACMPL_MOD,            XK_comma,       autocomplete,   { .i = ACMPL_FUZZY       } },
++	{ ACMPL_MOD,            XK_apostrophe,  autocomplete,   { .i = ACMPL_SUFFIX      } },
++	{ ACMPL_MOD,            XK_semicolon,   autocomplete,   { .i = ACMPL_SURROUND    } },
++	{ ACMPL_MOD,            XK_bracketright,autocomplete,   { .i = ACMPL_WWORD       } },
++	{ ACMPL_MOD,            XK_bracketleft, autocomplete,   { .i = ACMPL_FUZZY_WWORD } },
++	{ ACMPL_MOD,            XK_equal,       autocomplete,   { .i = ACMPL_UNDO        } },
+ };
+ 
+ /*
+diff -ruN a/Makefile b/Makefile
+--- a/Makefile	2023-06-06 00:22:32.209443612 -0500
++++ b/Makefile	2023-06-06 00:16:42.242785368 -0500
+@@ -44,6 +44,8 @@
+ 	mkdir -p $(DESTDIR)$(PREFIX)/bin
+ 	cp -f st $(DESTDIR)$(PREFIX)/bin
+ 	chmod 755 $(DESTDIR)$(PREFIX)/bin/st
++	cp -f st-autocomplete $(DESTDIR)$(PREFIX)/bin
++	chmod 755 $(DESTDIR)$(PREFIX)/bin/st-autocomplete
+ 	mkdir -p $(DESTDIR)$(MANPREFIX)/man1
+ 	sed "s/VERSION/$(VERSION)/g" < st.1 > $(DESTDIR)$(MANPREFIX)/man1/st.1
+ 	chmod 644 $(DESTDIR)$(MANPREFIX)/man1/st.1
+@@ -52,6 +54,7 @@
+ 
+ uninstall:
+ 	rm -f $(DESTDIR)$(PREFIX)/bin/st
++	rm -f $(DESTDIR)$(PREFIX)/bin/st-autocomplete
+ 	rm -f $(DESTDIR)$(MANPREFIX)/man1/st.1
+ 
+ .PHONY: all options clean dist install uninstall
+diff -ruN a/st-autocomplete b/st-autocomplete
+--- a/st-autocomplete	1969-12-31 18:00:00.000000000 -0600
++++ b/st-autocomplete	2023-06-06 00:16:42.242785368 -0500
+@@ -0,0 +1,310 @@
++#!/usr/bin/perl
++#########################################################################
++# Copyright (C) 2012-2017  Wojciech Siewierski                          #
++#                                                                       #
++# This program is free software: you can redistribute it and/or modify  #
++# it under the terms of the GNU General Public License as published by  #
++# the Free Software Foundation, either version 3 of the License, or     #
++# (at your option) any later version.                                   #
++#                                                                       #
++# This program is distributed in the hope that it will be useful,       #
++# but WITHOUT ANY WARRANTY; without even the implied warranty of        #
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
++# GNU General Public License for more details.                          #
++#                                                                       #
++# You should have received a copy of the GNU General Public License     #
++# along with this program.  If not, see <http://www.gnu.org/licenses/>. #
++#########################################################################
++
++my ($cmd, $cursor_row, $cursor_column) = @ARGV;
++
++my $lines = [];
++my $lines1 = [];
++
++my $last_line = -1;
++my $lines_before_cursor = 0;
++
++while (<stdin>)
++{
++	$last_line++;
++
++	s/[^[:print:]]/?/g;
++
++	if ($last_line < $cursor_row)
++	{
++		unshift @{$lines1}, $_;
++		$lines_before_cursor++;
++	}
++	else
++	{
++		unshift @{$lines}, $_;
++	}
++}
++
++foreach (@{$lines1})
++{
++	unshift @{$lines}, $_;
++}
++
++my $cursor_row_in = $cursor_row;
++
++$cursor_row = $last_line;
++
++
++$self = {};
++
++# A reference to a function that transforms the completed word
++# into a regex matching the completions. Usually generated by
++# generate_matcher().
++#
++# For example
++#   $fun = generate_matcher(".*");
++#   $fun->("foo");
++# would return "f.*o.*o"
++#
++# In other words, indirectly decides which characters can
++# appear in the completion.
++my $matcher;
++
++# A regular expression matching a character before each match.
++# For example, it you want to match the text after a
++# whitespace, set it to "\s".
++my $char_class_before;
++
++# A regular expression matching every character in the entered
++# text that will be used to find matching completions. Usually
++# "\w" or similar.
++my $char_class_to_complete;
++
++# A regular expression matching every allowed last character
++# of the completion (uses greedy matching).
++my $char_class_at_end;
++
++if ($cmd eq 'word-complete') {
++	# Basic word completion. Completes the current word
++	# without any special matching.
++	$char_class_before      = '[^-\w]';
++	$matcher                = sub { quotemeta shift }; # identity
++	$char_class_at_end      = '[-\w]';
++	$char_class_to_complete = '[-\w]';
++} elsif ($cmd eq 'WORD-complete') {
++	# The same as above but in the Vim meaning of a "WORD" --
++	# whitespace delimited.
++	$char_class_before      = '\s';
++	$matcher                = sub { quotemeta shift };
++	$char_class_at_end      = '\S';
++	$char_class_to_complete = '\S';
++} elsif ($cmd eq 'fuzzy-word-complete' ||
++		 $cmd eq 'skeleton-word-complete') {
++	# Fuzzy completion of the current word.
++	$char_class_before      = '[^-\w]';
++	$matcher                = generate_matcher('[-\w]*');
++	$char_class_at_end      = '[-\w]';
++	$char_class_to_complete = '[-\w]';
++} elsif ($cmd eq 'fuzzy-WORD-complete') {
++	# Fuzzy completion of the current WORD.
++	$char_class_before      = '\s';
++	$matcher                = generate_matcher('\S*');
++	$char_class_at_end      = '\S';
++	$char_class_to_complete = '\S';
++} elsif ($cmd eq 'fuzzy-complete' ||
++		 $cmd eq 'skeleton-complete') {
++	# Fuzzy completion of an arbitrary text.
++	$char_class_before      = '\W';
++	$matcher                = generate_matcher('.*?');
++	$char_class_at_end      = '\w';
++	$char_class_to_complete = '\S';
++} elsif ($cmd eq 'suffix-complete') {
++	# Fuzzy completion of an completing suffixes, like
++	# completing test=hello from /blah/hello.
++	$char_class_before      = '\S';
++	$matcher                = generate_matcher('\S*');
++	$char_class_at_end      = '\S';
++	$char_class_to_complete = '\S';
++} elsif ($cmd eq 'surround-complete') {
++	# Completing contents of quotes and braces.
++
++	# Here we are using three named groups: s, b, p for quotes, braces
++	# and parenthesis.
++	$char_class_before      = '((?<q>["\'`])|(?<b>\[)|(?<p>\())';
++
++	$matcher                = generate_matcher('.*?');
++
++	# Here we match text till enclosing pair, using perl conditionals in
++	# regexps (?(condition)yes-expression|no-expression).
++	# \0 is used to hack concatenation with '*' later in the code.
++	$char_class_at_end      = '.*?(.(?=(?(<b>)\]|((?(<p>)\)|\g{q})))))\0';
++	$char_class_to_complete = '\S';
++}
++
++
++# use the last used word or read the word behind the cursor
++my $word_to_complete = read_word_at_coord($self, $cursor_row, $cursor_column,
++										  $char_class_to_complete);
++
++print stdout "$word_to_complete\n";
++
++if ($word_to_complete) {
++	while (1) {
++		# ignore the completed word itself
++		$self->{already_completed}{$word_to_complete} = 1;
++
++		# continue the last search or start from the current row
++		my $completion = find_match($self,
++									$word_to_complete,
++									$self->{next_row} // $cursor_row,
++									$matcher->($word_to_complete),
++									$char_class_before,
++									$char_class_at_end);
++		if ($completion) {
++			print stdout $completion."\n".join ("\n", @{$self->{highlight}})."\n";
++		}
++		else {
++			last;
++		}
++	}
++}
++
++######################################################################
++
++sub highlight_match {
++    my ($self, $linenum, $completion) = @_;
++
++    # clear_highlight($self);
++
++    my $line = @{$lines}[$linenum];
++    my $re = quotemeta $completion;
++
++    $line =~ /$re/;
++
++    my $beg = $-[0];
++    my $end = $+[0];
++
++	if ($linenum >= $lines_before_cursor)
++	{
++		$lline = $last_line - $lines_before_cursor;
++		$linenum -= $lines_before_cursor;
++		$linenum = $lline - $linenum;
++		$linenum += $lines_before_cursor;
++	}
++
++
++    $self->{highlight} = [$linenum, $beg, $end];
++}
++
++######################################################################
++
++sub read_word_at_coord {
++    my ($self, $row, $col, $char_class) = @_;
++
++    $_ = substr(@{$lines} [$row], 0, $col); # get the current line up to the cursor...
++    s/.*?($char_class*)$/$1/;               # ...and read the last word from it
++    return $_;
++}
++
++######################################################################
++
++# Returns a function that takes a string and returns that string with
++# this function's argument inserted between its every two characters.
++# The resulting string is used as a regular expression matching the
++# completion candidates.
++sub generate_matcher {
++    my $regex_between = shift;
++
++    sub {
++        $_ = shift;
++
++        # sorry for this lispy code, I couldn't resist ;)
++        (join "$regex_between",
++         (map quotemeta,
++          (split //)))
++    }
++}
++
++######################################################################
++
++# Checks whether the completion found by find_match() was already
++# found and if it was, calls find_match() again to find the next
++# completion.
++#
++# Takes all the arguments that find_match() would take, to make a
++# mutually recursive call.
++sub skip_duplicates {
++    my ($self, $word_to_match, $current_row, $regexp, $char_class_before, $char_class_at_end) = @_;
++    my $completion;
++
++	if ($current_row <= $lines_before_cursor)
++	{
++		$completion = shift @{$self->{matches_in_row}}; # get the leftmost one
++	}
++	else
++	{
++		$completion = pop @{$self->{matches_in_row}}; # get the leftmost one
++	}
++
++    # check for duplicates
++    if (exists $self->{already_completed}{$completion}) {
++        # skip this completion
++        return find_match(@_);
++    } else {
++        $self->{already_completed}{$completion} = 1;
++
++		highlight_match($self,
++						$self->{next_row}+1,
++						$completion);
++
++        return $completion;
++    }
++}
++
++######################################################################
++
++# Finds the next matching completion in the row current row or above
++# while skipping duplicates using skip_duplicates().
++sub find_match {
++    my ($self, $word_to_match, $current_row, $regexp, $char_class_before, $char_class_at_end) = @_;
++    $self->{matches_in_row} //= [];
++
++    # cycle through all the matches in the current row if not starting a new search
++    if (@{$self->{matches_in_row}}) {
++        return skip_duplicates($self, $word_to_match, $current_row, $regexp, $char_class_before, $char_class_at_end);
++    }
++
++
++    my $i;
++    # search through all the rows starting with current one or one above the last checked
++    for ($i = $current_row; $i >= 0; --$i) {
++        my $line = @{$lines}[$i];   # get the line of text from the row
++
++        # if ($i == $cursor_row) {
++        #     $line = substr $line, 0, $cursor_column;
++        # }
++
++        $_ = $line;
++
++        # find all the matches in the current line
++        my $match;
++        push @{$self->{matches_in_row}}, $+{match} while ($_, $match) = /
++                                                                         (.*${char_class_before})
++                                                                         (?<match>
++                                                                             ${regexp}
++                                                                             ${char_class_at_end}*
++                                                                         )
++                                                                     /ix;
++        # corner case: match at the very beginning of line
++        push @{$self->{matches_in_row}}, $+{match} if $line =~ /^(${char_class_before}){0}(?<match>$regexp$char_class_at_end*)/i;
++
++        if (@{$self->{matches_in_row}}) {
++            # remember which row should be searched next
++            $self->{next_row} = --$i;
++
++            # arguments needed for find_match() mutual recursion
++            return skip_duplicates($self, $word_to_match, $i, $regexp, $char_class_before, $char_class_at_end);
++        }
++    }
++
++    # # no more possible completions, revert to the original word
++    # undo_completion($self) if $i < 0;
++
++    return undef;
++}
+diff -ruN a/st.c b/st.c
+--- a/st.c	2023-06-06 00:22:32.209443612 -0500
++++ b/st.c	2023-06-06 00:16:42.242785368 -0500
+@@ -17,6 +17,7 @@
+ #include <unistd.h>
+ #include <wchar.h>
+ 
++#include "autocomplete.h"
+ #include "st.h"
+ #include "win.h"
+ 
+@@ -718,8 +719,14 @@
+ 	if ((p = waitpid(pid, &stat, WNOHANG)) < 0)
+ 		die("waiting for pid %hd failed: %s\n", pid, strerror(errno));
+ 
+-	if (pid != p)
++	if (pid != p) {
++		if (p == 0 && wait(&stat) < 0)
++			die("wait: %s\n", strerror(errno));
++
++		/* reinstall sigchld handler */
++		signal(SIGCHLD, sigchld);
+ 		return;
++	}
+ 
+ 	if (WIFEXITED(stat) && WEXITSTATUS(stat))
+ 		die("child exited with status %d\n", WEXITSTATUS(stat));
+@@ -1991,6 +1998,59 @@
+ }
+ 
+ void
++externalpipe(const Arg *arg)
++{
++	int to[2];
++	char buf[UTF_SIZ];
++	void (*oldsigpipe)(int);
++	Glyph *bp, *end;
++	int lastpos, n, newline;
++
++	if (pipe(to) == -1)
++		return;
++
++	switch (fork()) {
++	case -1:
++		close(to[0]);
++		close(to[1]);
++		return;
++	case 0:
++		dup2(to[0], STDIN_FILENO);
++		close(to[0]);
++		close(to[1]);
++		execvp(((char **)arg->v)[0], (char **)arg->v);
++		fprintf(stderr, "st: execvp %s\n", ((char **)arg->v)[0]);
++		perror("failed");
++		exit(0);
++	}
++
++	close(to[0]);
++	/* ignore sigpipe for now, in case child exists early */
++	oldsigpipe = signal(SIGPIPE, SIG_IGN);
++	newline = 0;
++	for (n = 0; n < term.row; n++) {
++		bp = term.line[n];
++		lastpos = MIN(tlinelen(n) + 1, term.col) - 1;
++		if (lastpos < 0)
++			break;
++		end = &bp[lastpos + 1];
++		for (; bp < end; ++bp)
++			if (xwrite(to[1], buf, utf8encode(bp->u, buf)) < 0)
++				break;
++		if ((newline = term.line[n][lastpos].mode & ATTR_WRAP))
++			continue;
++		if (xwrite(to[1], "\n", 1) < 0)
++			break;
++		newline = 0;
++	}
++	if (newline)
++		(void)xwrite(to[1], "\n", 1);
++	close(to[1]);
++	/* restore */
++	signal(SIGPIPE, oldsigpipe);
++}
++
++void
+ strdump(void)
+ {
+ 	size_t i;
+@@ -2547,6 +2607,8 @@
+ 		return;
+ 	}
+ 
++	autocomplete ((const Arg []) { ACMPL_DEACTIVATE });
++
+ 	/*
+ 	 * slide screen to keep cursor where we expect it -
+ 	 * tscrollup would work here, but we can optimize to
+@@ -2666,3 +2728,256 @@
+ 	tfulldirt();
+ 	draw();
+ }
++
++void autocomplete (const Arg * arg)
++{
++	static _Bool active = 0;
++
++	int acmpl_cmdindex = arg -> i;
++
++	static int acmpl_cmdindex_prev;
++
++	if (active == 0)
++		acmpl_cmdindex_prev = acmpl_cmdindex;
++
++	static const char * const (acmpl_cmd []) = {
++		[ACMPL_DEACTIVATE]	= "__DEACTIVATE__",
++		[ACMPL_WORD]		= "word-complete",
++		[ACMPL_WWORD]		= "WORD-complete",
++		[ACMPL_FUZZY_WORD]	= "fuzzy-word-complete",
++		[ACMPL_FUZZY_WWORD]	= "fuzzy-WORD-complete",
++		[ACMPL_FUZZY]		= "fuzzy-complete",
++		[ACMPL_SUFFIX]		= "suffix-complete",
++		[ACMPL_SURROUND]	= "surround-complete",
++		[ACMPL_UNDO]		= "__UNDO__",
++	};
++
++	static char acmpl [1000];		// ACMPL_ISSUE: why 1000?
++
++	static FILE * acmpl_exec = NULL;
++	static int acmpl_status;
++
++	static const char * stbuffile;
++	static char target [1000];		// ACMPL_ISSUE: why 1000? dynamically allocate char array of size term.col
++	static size_t targetlen;
++
++	static char completion [1000] = {0};		// ACMPL_ISSUE: why 1000? dynamically allocate char array of size term.col
++	static size_t complen_prev = 0;		// NOTE: always clear this variable after clearing completion
++
++	static int cx, cy;
++
++	// ACMPL_ISSUE: crashes when term.row is too small
++
++// Check for deactivation
++
++	if (acmpl_cmdindex == ACMPL_DEACTIVATE)
++	{
++
++//     Deactivate autocomplete mode keeping current completion
++
++		if (active)
++		{
++			active = 0;
++			pclose (acmpl_exec);
++			remove (stbuffile);
++
++			if (complen_prev)
++			{
++				selclear ();
++				complen_prev = 0;
++			}
++		}
++
++		return;
++	}
++
++// Check for undo
++
++	if (acmpl_cmdindex == ACMPL_UNDO)
++	{
++
++//     Deactivate autocomplete mode recovering target
++
++		if (active)
++		{
++			active = 0;
++			pclose (acmpl_exec);
++			remove (stbuffile);
++
++			if (complen_prev)
++			{
++				selclear ();
++				for (size_t i = 0; i < complen_prev; i++)
++					ttywrite ((char []) { '\b' }, 1, 1);	// ACMPL_ISSUE: I'm not sure that this is the right way
++				complen_prev = 0;
++				ttywrite (target, targetlen, 0);		// ACMPL_ISSUE: I'm not sure that this is a right solution
++			}
++		}
++
++		return;
++	}
++
++// Check for command change
++
++	if (acmpl_cmdindex != acmpl_cmdindex_prev)
++	{
++
++//     If command is changed, goto acmpl_begin avoiding rewriting st buffer
++
++		if (active)
++		{
++			acmpl_cmdindex_prev = acmpl_cmdindex;
++
++			goto acmpl_begin;
++		}
++	}
++
++// If not active
++
++	if (active == 0)
++	{
++		acmpl_cmdindex_prev = acmpl_cmdindex;
++		cx = term.c.x;
++		cy = term.c.y;
++
++//     Write st buffer to a temp file
++
++		stbuffile = tmpnam (NULL);		// ACMPL_ISSUE: check for return value ...
++										// ACMPL_ISSUE: use coprocesses instead of temp files
++
++		FILE * stbuf = fopen (stbuffile, "w"); // ACMPL_ISSUE: check for opening error ...
++		char * stbufline = malloc (term.col + 2); // ACMPL_ISSUE: check for allocating error ...
++
++		int cxp = 0;
++
++		for (size_t y = 0; y < term.row; y++)
++		{
++			if (y == term.c.y) cx += cxp * term.col;
++
++			size_t x = 0;
++			for (; x < term.col; x++)
++				utf8encode (term.line [y] [x].u, stbufline + x);
++			if (term.line [y] [x - 1].mode & ATTR_WRAP)
++			{
++				x--;
++				if (y <= term.c.y) cy--;
++				cxp++;
++			}
++			else
++			{
++				stbufline [x] = '\n';
++				cxp = 0;
++			}
++			stbufline [x + 1] = 0;
++			fputs (stbufline, stbuf);
++		}
++
++		free (stbufline);
++		fclose (stbuf);
++
++acmpl_begin:
++
++//     Run st-autocomplete
++
++		sprintf (
++			acmpl,
++			"cat %100s | st-autocomplete %500s %d %d",	// ACMPL_ISSUE: why 100 and 500?
++			stbuffile,
++			acmpl_cmd [acmpl_cmdindex],
++			cy,
++			cx
++		);
++
++		acmpl_exec = popen (acmpl, "r");		// ACMPL_ISSUE: popen isn't defined by The Standard. Does it work in BSDs for example?
++												// ACMPL_ISSUE: check for popen error ...
++
++//     Read the target, targetlen
++
++		fscanf (acmpl_exec, "%500s\n", target); // ACMPL_ISSUE: check for scanning error ...
++		targetlen = strlen (target);
++	}
++
++// Read a completion if exists (acmpl_status)
++
++	unsigned line, beg, end;
++
++	acmpl_status = fscanf (acmpl_exec, "%500[^\n]\n%u\n%u\n%u\n", completion, & line, & beg, & end);
++												// ACMPL_ISSUE: why 500? use term.col instead
++
++// Exit if no completions found
++
++	if (active == 0 && acmpl_status == EOF)
++	{
++
++//    Close st-autocomplete and exit without activating the autocomplete mode
++
++		pclose (acmpl_exec);
++		remove (stbuffile);
++		return;
++	}
++
++// If completions found, enable autocomplete mode and autocomplete the target
++
++	active = 1;
++
++// Clear target before first completion
++
++	if (complen_prev == 0)
++	{
++		for (size_t i = 0; i < targetlen; i++)
++			ttywrite ((char []) { '\b' }, 1, 1);	// ACMPL_ISSUE: I'm not sure that this is a right solution
++	}
++
++// Clear previuos completion if this is not the first
++
++	else
++	{
++		selclear ();
++		for (size_t i = 0; i < complen_prev; i++)
++			ttywrite ((char []) { '\b' }, 1, 1);	// ACMPL_ISSUE: I'm not sure that this is a right solution
++		complen_prev = 0;
++	}
++
++// If no more completions found, reset and restart
++
++	if (acmpl_status == EOF)
++	{
++		active = 0;
++		pclose (acmpl_exec);
++		ttywrite (target, targetlen, 0);
++		goto acmpl_begin;
++	}
++
++// Count wrapped lines before the current line
++
++	int wl = 0;
++
++	int tl = line;
++
++	for (int l = 0; l < tl; l++)
++		if (term.line [l] [term.col - 1].mode & ATTR_WRAP)
++		{
++			wl++;
++			tl++;
++		}
++
++// Autcomplete
++
++	complen_prev = strlen (completion);
++	ttywrite (completion, complen_prev, 0);
++
++	if (line == cy && beg > cx)
++	{
++		beg += complen_prev - targetlen;
++		end += complen_prev - targetlen;
++
++		// ACMPL_ISSUE: highlignthing doesn't work when "line == cy && beg > cx",
++		//				but coordinates are correct...
++	}
++
++	end--;
++
++	selstart (beg % term.col, line + wl + beg / term.col, 0);
++	selextend (end % term.col, line + wl + end / term.col, 1, 0);
++	xsetsel (getsel ());
++}
+diff -ruN a/st.h b/st.h
+--- a/st.h	2023-06-06 00:22:32.209443612 -0500
++++ b/st.h	2023-06-06 00:16:42.242785368 -0500
+@@ -77,10 +77,13 @@
+ 	const char *s;
+ } Arg;
+ 
++void autocomplete (const Arg *);
++
+ void die(const char *, ...);
+ void redraw(void);
+ void draw(void);
+ 
++void externalpipe(const Arg *);
+ void printscreen(const Arg *);
+ void printsel(const Arg *);
+ void sendbreak(const Arg *);
+diff -ruN a/x.c b/x.c
+--- a/x.c	2023-06-06 00:22:32.209443612 -0500
++++ b/x.c	2023-06-06 00:16:42.242785368 -0500
+@@ -81,6 +81,7 @@
+ typedef struct {
+ 	int tw, th; /* tty width and height */
+ 	int w, h; /* window width and height */
++	int hborderpx, vborderpx;
+ 	int ch; /* char height */
+ 	int cw; /* char width  */
+ 	int mode; /* window state/mode flags */
+@@ -253,6 +254,7 @@
+ static char *opt_title = NULL;
+ 
+ static uint buttons; /* bit field of pressed buttons */
++static int cursorblinks = 0;
+ 
+ void
+ clipcopy(const Arg *dummy)
+@@ -331,7 +333,7 @@
+ int
+ evcol(XEvent *e)
+ {
+-	int x = e->xbutton.x - borderpx;
++	int x = e->xbutton.x - win.hborderpx;
+ 	LIMIT(x, 0, win.tw - 1);
+ 	return x / win.cw;
+ }
+@@ -339,7 +341,7 @@
+ int
+ evrow(XEvent *e)
+ {
+-	int y = e->xbutton.y - borderpx;
++	int y = e->xbutton.y - win.vborderpx;
+ 	LIMIT(y, 0, win.th - 1);
+ 	return y / win.ch;
+ }
+@@ -739,6 +741,9 @@
+ 	col = MAX(1, col);
+ 	row = MAX(1, row);
+ 
++	win.hborderpx = (win.w - col * win.cw) / 2;
++	win.vborderpx = (win.h - row * win.ch) / 2;
++
+ 	tresize(col, row);
+ 	xresize(col, row);
+ 	ttyresize(win.tw, win.th);
+@@ -869,8 +874,8 @@
+ 	sizeh->flags = PSize | PResizeInc | PBaseSize | PMinSize;
+ 	sizeh->height = win.h;
+ 	sizeh->width = win.w;
+-	sizeh->height_inc = win.ch;
+-	sizeh->width_inc = win.cw;
++	sizeh->height_inc = 1;
++	sizeh->width_inc = 1;
+ 	sizeh->base_height = 2 * borderpx;
+ 	sizeh->base_width = 2 * borderpx;
+ 	sizeh->min_height = win.ch + 2 * borderpx;
+@@ -1152,8 +1157,8 @@
+ 	xloadcols();
+ 
+ 	/* adjust fixed window geometry */
+-	win.w = 2 * borderpx + cols * win.cw;
+-	win.h = 2 * borderpx + rows * win.ch;
++	win.w = 2 * win.hborderpx + 2 * borderpx + cols * win.cw;
++	win.h = 2 * win.vborderpx + 2 * borderpx + rows * win.ch;
+ 	if (xw.gm & XNegative)
+ 		xw.l += DisplayWidth(xw.dpy, xw.scr) - win.w - 2;
+ 	if (xw.gm & YNegative)
+@@ -1242,7 +1247,7 @@
+ int
+ xmakeglyphfontspecs(XftGlyphFontSpec *specs, const Glyph *glyphs, int len, int x, int y)
+ {
+-	float winx = borderpx + x * win.cw, winy = borderpx + y * win.ch, xp, yp;
++	float winx = win.hborderpx + x * win.cw, winy = win.vborderpx + y * win.ch, xp, yp;
+ 	ushort mode, prevmode = USHRT_MAX;
+ 	Font *font = &dc.font;
+ 	int frcflags = FRC_NORMAL;
+@@ -1375,7 +1380,7 @@
+ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, int y)
+ {
+ 	int charlen = len * ((base.mode & ATTR_WIDE) ? 2 : 1);
+-	int winx = borderpx + x * win.cw, winy = borderpx + y * win.ch,
++	int winx = win.hborderpx + x * win.cw, winy = win.vborderpx + y * win.ch,
+ 	    width = charlen * win.cw;
+ 	Color *fg, *bg, *temp, revfg, revbg, truefg, truebg;
+ 	XRenderColor colfg, colbg;
+@@ -1465,17 +1470,17 @@
+ 
+ 	/* Intelligent cleaning up of the borders. */
+ 	if (x == 0) {
+-		xclear(0, (y == 0)? 0 : winy, borderpx,
++		xclear(0, (y == 0)? 0 : winy, win.hborderpx,
+ 			winy + win.ch +
+-			((winy + win.ch >= borderpx + win.th)? win.h : 0));
++			((winy + win.ch >= win.vborderpx + win.th)? win.h : 0));
+ 	}
+-	if (winx + width >= borderpx + win.tw) {
++	if (winx + width >= win.hborderpx + win.tw) {
+ 		xclear(winx + width, (y == 0)? 0 : winy, win.w,
+-			((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
++			((winy + win.ch >= win.vborderpx + win.th)? win.h : (winy + win.ch)));
+ 	}
+ 	if (y == 0)
+-		xclear(winx, 0, winx + width, borderpx);
+-	if (winy + win.ch >= borderpx + win.th)
++		xclear(winx, 0, winx + width, win.vborderpx);
++	if (winy + win.ch >= win.vborderpx + win.th)
+ 		xclear(winx, winy + win.ch, winx + width, win.h);
+ 
+ 	/* Clean up the region we want to draw to. */
+@@ -1520,6 +1525,7 @@
+ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
+ {
+ 	Color drawcol;
++	XRenderColor colbg;
+ 
+ 	/* remove the old cursor */
+ 	if (selected(ox, oy))
+@@ -1549,55 +1555,84 @@
+ 			g.fg = defaultfg;
+ 			g.bg = defaultrcs;
+ 		} else {
++			/** this is the main part of the dynamic cursor color patch */
++			g.bg = g.fg;
+ 			g.fg = defaultbg;
+-			g.bg = defaultcs;
+ 		}
+-		drawcol = dc.col[g.bg];
++
++		/**
++		 * and this is the second part of the dynamic cursor color patch.
++		 * it handles the `drawcol` variable
++		*/
++		if (IS_TRUECOL(g.bg)) {
++			colbg.alpha = 0xffff;
++			colbg.red = TRUERED(g.bg);
++			colbg.green = TRUEGREEN(g.bg);
++			colbg.blue = TRUEBLUE(g.bg);
++			XftColorAllocValue(xw.dpy, xw.vis, xw.cmap, &colbg, &drawcol);
++		} else {
++			drawcol = dc.col[g.bg];
++		}
+ 	}
+ 
+ 	/* draw the new one */
+ 	if (IS_SET(MODE_FOCUSED)) {
+ 		switch (win.cursor) {
+-		case 7: /* st extension */
+-			g.u = 0x2603; /* snowman (U+2603) */
++		default:
++		case 0: /* blinking block */
++		case 1: /* blinking block (default) */
++			if (IS_SET(MODE_BLINK))
++				break;
+ 			/* FALLTHROUGH */
+-		case 0: /* Blinking Block */
+-		case 1: /* Blinking Block (Default) */
+-		case 2: /* Steady Block */
++		case 2: /* steady block */
+ 			xdrawglyph(g, cx, cy);
+ 			break;
+-		case 3: /* Blinking Underline */
+-		case 4: /* Steady Underline */
++		case 3: /* blinking underline */
++			if (IS_SET(MODE_BLINK))
++				break;
++			/* FALLTHROUGH */
++		case 4: /* steady underline */
+ 			XftDrawRect(xw.draw, &drawcol,
+-					borderpx + cx * win.cw,
+-					borderpx + (cy + 1) * win.ch - \
++					win.hborderpx + cx * win.cw
++					win.vborderpx + (cy + 1) * win.ch - \
+ 						cursorthickness,
+ 					win.cw, cursorthickness);
+ 			break;
+-		case 5: /* Blinking bar */
+-		case 6: /* Steady bar */
++		case 5: /* blinking bar */
++			if (IS_SET(MODE_BLINK))
++				break;
++			/* FALLTHROUGH */
++		case 6: /* steady bar */
+ 			XftDrawRect(xw.draw, &drawcol,
+-					borderpx + cx * win.cw,
+-					borderpx + cy * win.ch,
++					win.hborderpx + cx * win.cw,
++					win.vborderpx + cy * win.ch,
+ 					cursorthickness, win.ch);
+ 			break;
++		case 7: /* blinking st cursor */
++			if (IS_SET(MODE_BLINK))
++				break;
++			/* FALLTHROUGH */
++		case 8: /* steady st cursor */
++			g.u = stcursor;
++			xdrawglyph(g, cx, cy);
++			break;
+ 		}
+ 	} else {
+ 		XftDrawRect(xw.draw, &drawcol,
+-				borderpx + cx * win.cw,
+-				borderpx + cy * win.ch,
++				win.hborderpx + cx * win.cw,
++				win.vborderpx + cy * win.ch,
+ 				win.cw - 1, 1);
+ 		XftDrawRect(xw.draw, &drawcol,
+-				borderpx + cx * win.cw,
+-				borderpx + cy * win.ch,
++				win.hborderpx + cx * win.cw,
++				win.vborderpx + cy * win.ch,
+ 				1, win.ch - 1);
+ 		XftDrawRect(xw.draw, &drawcol,
+-				borderpx + (cx + 1) * win.cw - 1,
+-				borderpx + cy * win.ch,
++				win.hborderpx + (cx + 1) * win.cw - 1,
++				win.vborderpx + cy * win.ch,
+ 				1, win.ch - 1);
+ 		XftDrawRect(xw.draw, &drawcol,
+-				borderpx + cx * win.cw,
+-				borderpx + (cy + 1) * win.ch - 1,
++				win.hborderpx + cx * win.cw,
++				win.vborderpx + (cy + 1) * win.ch - 1,
+ 				win.cw, 1);
+ 	}
+ }
+@@ -1737,9 +1772,12 @@
+ int
+ xsetcursor(int cursor)
+ {
+-	if (!BETWEEN(cursor, 0, 7)) /* 7: st extension */
++	if (!BETWEEN(cursor, 0, 8)) /* 7-8: st extensions */
+ 		return 1;
+ 	win.cursor = cursor;
++	cursorblinks = win.cursor == 0 || win.cursor == 1 ||
++	               win.cursor == 3 || win.cursor == 5 ||
++	               win.cursor == 7;
+ 	return 0;
+ }
+ 
+@@ -1853,11 +1891,20 @@
+ 	/* 1. shortcuts */
+ 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
+ 		if (ksym == bp->keysym && match(bp->mod, e->state)) {
++			if (bp -> func != autocomplete)
++				autocomplete ((const Arg []) { ACMPL_DEACTIVATE });
+ 			bp->func(&(bp->arg));
+ 			return;
+ 		}
+ 	}
+ 
++	if (!(
++		len == 0 &&
++		e -> state & ~ignoremod		// ACMPL_ISSUE: I'm not sure that this is the right way
++				| ACMPL_MOD == ACMPL_MOD
++	))
++		autocomplete ((const Arg []) { ACMPL_DEACTIVATE });
++
+ 	/* 2. custom keys from config.h */
+ 	if ((customkey = kmap(ksym, e->state))) {
+ 		ttywrite(customkey, strlen(customkey), 1);
+@@ -1986,6 +2033,10 @@
+ 		if (FD_ISSET(ttyfd, &rfd) || xev) {
+ 			if (!drawing) {
+ 				trigger = now;
++				if (IS_SET(MODE_BLINK)) {
++					win.mode ^= MODE_BLINK;
++				}
++				lastblink = now;
+ 				drawing = 1;
+ 			}
+ 			timeout = (maxlatency - TIMEDIFF(now, trigger)) \
+@@ -1996,7 +2047,7 @@
+ 
+ 		/* idle detected or maxlatency exhausted -> draw */
+ 		timeout = -1;
+-		if (blinktimeout && tattrset(ATTR_BLINK)) {
++		if (blinktimeout && (cursorblinks || tattrset(ATTR_BLINK))) {
+ 			timeout = blinktimeout - TIMEDIFF(now, lastblink);
+ 			if (timeout <= 0) {
+ 				if (-timeout > blinktimeout) /* start visible */
+@@ -2032,7 +2083,7 @@
+ {
+ 	xw.l = xw.t = 0;
+ 	xw.isfixed = False;
+-	xsetcursor(cursorshape);
++	xsetcursor(cursorstyle);
+ 
+ 	ARGBEGIN {
+ 	case 'a':
