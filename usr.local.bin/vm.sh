@@ -1,9 +1,14 @@
 #!/bin/sh
 
 dir=/var/vm
-if=wlp166s0 
 user=vm # Any non-root user with a shell
 export user
+
+# Find exit interface (default route with lowest metric),
+# use /usr/bin/ip since ip -c interferes with grep -o
+iface="$(/usr/bin/ip route show | grep "$(ip route show | grep default | \
+	grep -o 'metric [0-9]*' | cut -d " " -f 2 | sort | head -n 1)" | \
+	grep default | grep -o 'dev [a-z0-9]*' | cut -d " " -f 2)"
 
 # If script fails, let the user hit Enter key before exiting so they
 # have a chance to read error message(s) before terminal closes
@@ -148,7 +153,7 @@ if [ X"$(sysctl net.ipv6.conf.all.forwarding)" = \
 	sysctl net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
 	routing6=wasoff
 fi
-iptables -t nat -A POSTROUTING -o "$if" -j MASQUERADE
+iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
 
 # Root has a hard time running GUI applications
 export _drive drive2 _cdrom
