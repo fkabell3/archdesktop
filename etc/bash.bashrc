@@ -5,8 +5,8 @@ case "$-" in
 	*) return;;
 esac
 
-alias ls='ls --color=auto'
-alias ll="ls -Fhl"
+alias ls='ls -F --color=auto'
+alias ll="ls -hl"
 alias grep='grep --color=auto'
 alias ip='ip -c'
 
