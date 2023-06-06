@@ -11,7 +11,7 @@ app="$(printf '%s\n' \
 	System | dmenu -i -l "$DMENULINENUM")"
 
 case "$app" in
-	"Browser") $BROWSER;;
+	"Browser") eval "$BROWSER";;
 	"RSS") dmenu_rss;;
 	"Terminal") tabbed -r 2 st -w '';;
 	"Sound") st -w '' alsamixer;;
