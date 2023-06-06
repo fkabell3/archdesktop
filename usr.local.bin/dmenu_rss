@@ -1,5 +1,4 @@
 #!/bin/sh
-# Public domain - Frederick Key Abell III
 
 dir=~/.sfeed
 lsfeed() {
