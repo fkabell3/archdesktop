@@ -6,16 +6,12 @@ Arch Linux installation script with many suckless.org utilities. This setup trie
 * Password management is dealt with files, directories, and xclip
 * Quick screenshotting, and network/sound configuration
 * Terminal emulation has the ability to open files and links easily
-* doas instead of sudo, /bin/sh -> dash
 * Virtual machines can be spawned trivally with a few keystrokes
 
-All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme as been applied to get that nice look often seen in Apple software.<br>
+All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme has been applied to get that nice look often seen in Apple software.<br>
 
-Many of the companion scripts will not work alone; they must either be used on a system setup with `archinstall.sh`, or edited manually to become usable on your system. The most notable offenders are:
+Non-GUI features include:<br>
+* doas instead of sudo (which shim installed), /bin/sh -> dash
+* Transparent privlidge dropping when running `makepkg` or `yay` as root
 
-* Heavy usage of `$DMENULINENUM` and `$BROWSER` which are both exported from xinitrc. Make sure you set those variables if you are using the scripts on yout own system without `archinstall.sh`. Do note that this version of dmenu has a small patch applied to hide empty lines, it may not make sense to use `$DMENULINENUM` if your build of dmenu does not have that.
-* `dmenu_rss` calls a binary called `sfeed_plain_trimmed`. This is a version of `sfeed_plain` with lines commented out and `printutf8pad()` replaced with a `printf()` statement. The resultant binary is much easier to parse with awk, as it is done in `dmenu_rss`.<br>
-
-Will upload `archinstall.sh` soon.
-
-Feedback is appreciated.
+Your feedback is appreciated.
