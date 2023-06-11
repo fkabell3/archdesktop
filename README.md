@@ -10,6 +10,8 @@ Arch Linux installation script with many suckless.org utilities. This setup trie
 
 All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme has been applied to get that nice look often seen in Apple software.<br>
 
+<img width="1000" src="https://github.com/fkabell3/archdesktop/blob/main/archdesktop.png">
+
 Non-GUI features include:<br>
 * doas instead of sudo (which shim installed), /bin/sh -> dash
 * Transparent privlidge dropping when running `makepkg` or `yay` as root
