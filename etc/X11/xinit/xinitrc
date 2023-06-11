@@ -32,7 +32,7 @@ DMENULINENUM=25
 export DMENULINENUM
 
 # Permit any user to run X applications (needed for vm.sh)
-# Potentially a security risk, but network is dissallowed access to X anyways
+# Potentially a security risk, but network is disallowed access to X anyways
 xhost +local:
 
 # Start the suckless.org Dynamic Window Manager
