@@ -1,13 +1,13 @@
 #!/bin/sh
 
+_gitdir='Input directory where this repo was cloned into: '
+#gitdir=
+_disk='Input target disk to install Linux: '
+#disk=
 _timezone='Input your timezone (as in /usr/share/zoneinfo/): '
 #timezone=
 _hostname='Input system long hostname: '
 #hostname=
-_gitdir='Input directory where this repo was cloned into: '
-#gitdir=
-_disk='Input target disk to install Arch Linux: '
-#disk=
 _rootpass='Input root password: '
 #rootpass=
 _user='Input username (added to :wheel): '
@@ -16,6 +16,24 @@ _usergecos='Input user GECOS field: '
 #usergecos=
 _userpass='Input user password: '
 #userpass=
+
+# Comment out this variable to disable LibreWolf browser installation
+librewolf_addons="ublock-origin sponsorblock istilldontcareaboutcookies
+clearurls darkreader complete-black-theme-for-firef"
+
+netcheck() {
+	printf "%s" "Checking network connection..."
+	if ping -c 1 archlinux.org >/dev/null 2>&1; then
+		printf "%s\n" " ok"
+	elif ping -c 1 1.1.1.1 >/dev/null 2>&1; then
+		printf "\n%s\n" "DNS potentially is not working, exiting..."
+		exit 2
+	else
+		printf "%s\n" \
+			" ping failed, exiting..."
+		exit 3
+	fi
+}
 
 userquery() {
 	printf "%s\n" "Note: variables do not get checked."
@@ -34,20 +52,64 @@ userquery() {
 	done
 }
 
-netcheck() {
-	if ping -c 1 archlinux.org >/dev/null 2>&1; then
-		printf "%s\n" "Network is working."
-	elif ping -c 1 1.1.1.1 >/dev/null 2>&1; then
-		printf "%s\n" "DNS potentially could not be working." \
-			"Exiting..."
-		exit 2
-	else
-		printf "%s\n" \
-			"Make sure you have a working internet connection." \
-			"(ping failed)"
-			"Exiting..."
-		exit 3
+autosize() {
+	case "$2" in
+		total) base="$storage";;
+		free) base="$free"
+			min=0
+			max="$storage";;
+	esac
+	gibi=$((base / $3))
+	min="$4"
+	case "$5" in
+		NULL);;
+		*) max="$5";;
+	esac
+	if [ "$gibi" -lt "$min" ]; then
+		gibi="$min"
+	elif [ "$gibi" -gt "$max" ]; then
+		gibi="$max"
+	# elif $gibi is not a power of 2; then
+	elif factor -h "$gibi" | \
+		eval '! grep "^$gibi: 2\^[0-9]*$\|^$gibi:$" >/dev/null 2>&1'
+		then
+		x=1
+		while [ "$x" -lt "$gibi" ]; do
+			y="$x"
+			x=$((x * 2))
+		done
+		gibi="$y"
 	fi
+	eval "$1size=$gibi"
+	free=$((free - gibi))
+}
+
+autodisk() {
+	if [ X"$disklabel" = X"mbr" ] && [ "$partnum" -eq 4 ]; then
+		printf "%s\n" ",,Ex;"
+		partnum=$((partnum + 1))
+	fi
+	size=$(($2 * sectorspergibi))
+	printf "%s\n" ",$size,$code;"
+	partnum=$((partnum + 1))
+}
+
+automkfs() {
+	if [ X"$disklabel" = X"mbr" ] && [ "$partnum" -eq 4 ]; then
+		partnum=$((partnum + 1))
+	fi
+	case "$4" in
+		vfat) mkfs="mkdosfs -n $1 -F 32";;
+		swap) mkfs="mkswap -L $1";;
+		ext4) mkfs="mkfs.ext4 -L $1";;
+	esac
+	eval "$mkfs /dev/$diskp$partnum"
+	[ -d /mnt"$3" ] || mkdir -p /mnt"$3"
+	case "$4" in
+		swap) swapon LABEL="$1";;
+		*) mount LABEL="$1" /mnt"$3";;
+	esac
+	partnum=$((partnum + 1))
 }
 
 partsuffix() {
@@ -57,55 +119,6 @@ partsuffix() {
 	esac
 }
 
-# Usage: automkfs <label>
-automkfs() {
-	case "$1" in
-		# FAT filesystem labels should be uppercase
-		BOOT) fs="vfat"
-			mount="/mnt/boot"
-			options="defaults"
-			partnum=1
-			dump=0
-			pass=2;;
-		swap) fs="$1"
-			mount="$1"
-			options="defaults"
-			partnum=2
-			dump=0
-			pass=0;;
-		rootfs) fs="ext4"
-			mount="/mnt"
-			options="defaults"
-			partnum=3
-			dump=0
-			pass=1;;
-		home) fs="ext4"
-			mount="/mnt/$1"
-			options="defaults"
-			partnum=5
-			dump=0
-			pass=2;;
-	esac 
-	case "$fs" in
-		vfat) mkfs="mkdosfs -n $1 -F 32";;
-		swap) mkfs="mkswap -L $1";;
-		ext4) mkfs="mkfs.ext4 -L $1";;
-	esac
-	eval "$mkfs /dev/$diskp$partnum"
-	case "$1" in
-		swap) swapon LABEL="$1";;
-		*) [ -d "$mount" ] || mkdir "$mount"
-			mount LABEL="$1" "$mount";;
-	esac
-	label="$(blkid | grep "^/dev/$diskp$partnum" | \
-		cut -d " " -f 2 | cut -d \" -f 2)"
-	[ -d /mnt/etc ] || mkdir /mnt/etc
-	mount="$(printf "%s" "$mount" | sed "s/\/mnt//")"
-	# genfstab(8) is also available
-	printf "%s\n" "LABEL=$label $mount $fs $options $dump $pass" \
-		>> /mnt/etc/fstab
-} 
-
 # Directory where programs get built inside chroot
 # This is also made into user bin's home directory
 builddir=/var/builds
@@ -114,10 +127,20 @@ builddir=/var/builds
 # This is also made into user vm's home directory
 vmdir=/var/vm
 
-if [ -d /sys/firmware/efi ]; then
-       	bootmode=EFI
+if [ -d /sys/firmware/efi/efivars ]; then
+       	bootmode=efi
 else
-	bootmode=BIOS
+	bootmode=bios
+fi
+
+if [ X"$bootmode" = X"efi" ]; then
+	if true; then
+		disklabel=gpt
+	else
+		disklabel=pmbr
+	fi
+elif [ X"$bootmode" = X"bios" ]; then
+	disklabel=mbr
 fi
 
 if [ X"$1" != X"nochroot" ] && [ X"$1" != X"chroot" ]; then
@@ -126,67 +149,177 @@ if [ X"$1" != X"nochroot" ] && [ X"$1" != X"chroot" ]; then
 	exit 1
 elif [ X"$1" = X"nochroot" ]; then
 	netcheck
-	userquery hostname gitdir disk
-	echo $diskp
-	builddir=/mnt"$builddir"
+	userquery gitdir disk
 
-	printf "\n"
+	# Gibibytes of storage available on $drive
+	# minus 1 gibi for metadata
+	storage=$(($(grep "$disk$" /proc/partitions | \
+		awk '{print $3}') / 1024 / 1024 - 1))
+	free="$storage"
+	# Gibibytes of memory available on system
+	ram=$(($(grep MemTotal: /proc/meminfo | \
+		grep -o '[0-9]*') / 1024 / 1024))
+
+	# The whole autosize section needs to be reworked for better numbers
+	# Could not find swap algorithm which took both RAM and storage as input
+	swapmax=$((storage / 16))
+	# <min> or <max> can be NULL (only with `free')
+	# autosize() <label>   <total|free>  <denominator>     <min>  <max>
+	autosize     swap      total         "$ram"            1      "$swapmax"
+	autosize     rootfs    free          4                 8      32
+	autosize     boot      total         1024              1      2
+	autosize     usr       total         32                4      16
+	autosize     usrlocal  total         32                2      16
+	autosize     var       total         32                4      32
+	autosize     vartmp    total         512               1      4
+	autosize     home      free          1                 1      NULL
+	if [ X"$bootmode" = X"efi" ]; then
+	autosize     ESP       total         1024              1      2
+	   _ESP="ESP      $ESPsize      /boot/efi  vfat  rw,noexec,nosuid,nodev             0 2"
+	fi
+	# If using (P?)MBR, the boot partition should be on a 
+	# primary partition so put it within the first three
+	printf "%s\n" \
+		"swap     $swapsize     none       swap  sw                                 0 0" \
+		"rootfs   $rootfssize   /          ext4  rw,noexec,nosuid,nodev             0 1" \
+		"boot     $bootsize     /boot      ext4  rw,noexec,nosuid,nodev             0 2" \
+		"$_ESP" \
+		"usr      $usrsize      /usr       ext4  rw,nodev                           0 2" \
+		"usrlocal $usrlocalsize /usr/local ext4  rw,nodev                           0 2" \
+		"var      $varsize      /var       ext4  rw,noexec,nosuid,nodev             0 2" \
+		"vartmp   $vartmpsize   /var/tmp   ext4  rw,noexec,nosuid,nodev,strictatime 0 2" \
+		"home     $homesize     /home      ext4  rw,noexec,nosuid,nodev             0 2" \
+		> /tmp/disk
+
+		true > /tmp/disk.rej > /tmp/disk.swap
+
+	_break=0
+	regex='^[a-zA-Z]* *[0-9]* *[/a-z]* *\(ext4\|vfat\|swap\) *[a-z,]* *[0-1] *[0-2]'
 	while true; do
-		printf "%s\n" "Time to partition your disk." \
-			"This script expects four partitions:" \
-			">> /boot(1), swap(2), / [rootfs](3), and /home(5)." \
-			"Make sure they are in that order." \
-			"GRUB does not make use of the boot flag." \
-			"And note that this system is using $bootmode."
-				fdisk /dev/"$disk"
-				clear
-				lsblk -o NAME,SIZE,TYPE -e 7
-				printf "%s" "Are you done partitioning? "
-				read REPLY
-				case "$REPLY" in 
-					[Yy]*) break;;
-				esac 
+		printf "%s\n" "# disk: $disk, storage: $storage, memory: $ram" \
+			"#" > /tmp/disk.swap
+		column --table --table-columns \
+			'# <label>,<size>,<mount>,<fs>,<options>,<dump>,<pass>' \
+			< /tmp/disk >> /tmp/disk.swap
+		free="$storage"
+		#for number in $(awk '{print $2}' /tmp/disk | grep '[0-9]'); do
+		for number in $(awk '{print $2}' /tmp/disk); do
+			free=$((free - number))
+		done
+		printf "%s\n" "# Free: $free" >> /tmp/disk.swap
+		cp /tmp/disk.swap /tmp/disk.bak
+		clear
+		cat /tmp/disk.swap
+		[ "$free" -lt 0 ] && printf "%s\n" "" \
+			"WARNING: MORE STORAGE ALLOCATED THAN AVAILABLE" \
+			"THIS WILL BREAK SCRIPT"
+		if [ -s /tmp/disk.rej ]; then
+			printf "%s\n" "" \
+				"WARNING: THE REGULAR EXPRESSION:" \
+				"$regex"
+			if [ "$(wc -l < /tmp/disk.rej)" -gt 1 ]; then
+				printf "%s\n" "DID NOT MATCH LINES:"
+			else
+				printf "%s\n" "DID NOT MATCH LINE:"
+			fi
+			cat /tmp/disk.rej
+		fi
+		printf "\n%s" "Are these values ok? [yes/vim] "
+		read REPLY
+		case "$REPLY" in
+			[Yy]*) _break=1;;
+			[Vv]*) cat /tmp/disk.swap > /tmp/disk.edit
+				if [ -s /tmp/disk.rej ]; then
+					printf "%s\n" "" "# Rejects:" \
+						>> /tmp/disk.edit
+					while read line; do
+						printf "%s\n" "#$line"
+					done < /tmp/disk.rej >> /tmp/disk.edit
+					true > /tmp/disk.rej
+				fi
+				vim /tmp/disk.edit
+				cp /tmp/disk.edit /tmp/disk.swap
+		esac
+		grep -o "$regex" /tmp/disk.swap > /tmp/disk
+		grep -v "^$\|^#\|$regex" /tmp/disk.swap > /tmp/disk.rej
+		[ "$_break" -eq 1 ] && break
 	done
+
+	printf "%s\n" \
+		"Press \`Enter' to wipe partition table and install Linux," \
+		"CTRL/C to abort."
+	read REPLY
+
 	partsuffix
-	# rootfs must be mounted first excluding swap
-	for part in rootfs BOOT swap home; do
-		automkfs "$part"
-	done
-	#genfstab -U /mnt > /mnt/etc/fstab
+	sectorsize="$(cat /sys/block/"$disk"/queue/hw_sector_size)"
+	sectorspergibi=$((1073741824 / sectorsize))
 
+	sfdisk --delete /dev/"$disk"
+	partnum=1
+	while read line; do
+		eval autodisk "$line"
+	done < /tmp/disk | sfdisk -X "$disklabel" /dev/"$disk"
+
+	partnum=1
+	while read line; do
+		eval automkfs "$line"
+	done < /tmp/disk
+
+	sed "s/#ParallelDownloads = 5/ParallelDownloads = 8/" /etc/pacman.conf \
+		> /etc/pacman.conf.new
+	mv /etc/pacman.conf.new /etc/pacman.conf
 	pacman -Sy --noconfirm archlinux-keyring
-	pacstrap /mnt base linux linux-firmware alsa-utils bridge-utils dash \
-		git go grub imlib2 libx11 libxft libxinerama man-db man-pages \
-		mupdf networkmanager opendoas openresolv picom qemu-system-x86 \
-		qemu-ui-gtk scrot vim xclip xdotool xorg-server xorg-xdm \
-		xorg-xhost xorg-xinit xorg-xsetroot xwallpaper \
-		xf86-video-fbdev xf86-video-intel xf86-video-vesa 
+	system_pkgs="base linux linux-firmware dash grub opendoas git vim"
+	network_pkgs="networkmanager openresolv"
+	doc_pkgs="man-db man-pages"
+	gui_pkgs="alsa-utils picom scrot xclip xclip xdotool xorg-server
+	xorg-xdm xorg-xhost xorg-xinit xorg-xsetroot xwallpaper imlib2 libx11
+	libxft libxinerama"
+	vm_pkgs="bridge-utils qemu-system-x86 qemu-ui-gtk"
 	# Xorg log complained about these three not being installed on
-	# Librem 14 & Framework; Spike CPU usage if one or all? not installed
-
-	# Download all packages in base-devel except sudo
-	pacman -Si base-devel | grep "Depends On" | cut -d : -f 2 | \
-		sed s/sudo// | xargs pacstrap /mnt
-	[ X"$bootmode" = X"EFI" ] && pacstrap /mnt efibootmgr
-	printf "%s\n" "pacstrap completed!" "Copying files and git cloning..."
+	# Framework/Librem 14, spikes CPU if (one or all?) not installed
+	video_drivers_pkgs="xf86-video-fbdev xf86-video-intel xf86-video-vesa"
+	devel_pkgs="$(pacman -Si base-devel | grep "Depends On" | cut -d : -f 2 | \
+		sed "s/sudo//")"
+	[ X"$bootmode" = X"efi" ] && uefi_pkgs=efibootmgr
+	[ -z "$librewolf_addons" ] || browser_pkgs="unzip"
+	pacstrap /mnt $system_pkgs $network_pkgs $doc_pkgs $gui_pkgs $vm_pkgs \
+		$video_drivers_pkgs $devel_pkgs $uefi_pkgs $browser_pkgs
+	pacstatus="$?"
+	if [ "$pacstatus" -eq 0 ]; then
+		printf "%s\n" "" "pacstrap completed!" \
+			"Copying files, git cloning, and making fstab..." ""
+	else
+		printf "%s\n" "" \
+			"pacstrap failed with exit $pacstatus." \
+			"Reboot and try script again. Sorry!"
+		exit 4
+	fi
 
 	cp "$0" /mnt
-	# Carry $disk into chroot so to not prompt user twice
+	# We need $disk in chroot also, don't ask user twice
 	sed "s/^[#]\{0,\}disk=$/disk=$disk/" /mnt/"$0" > /mnt/"$0".new
 	mv /mnt/"$0".new /mnt/"$0"
 	chmod 740 /mnt/"$0"
 	cp "$gitdir"/usr.local.bin/* /mnt/usr/local/bin
-	# Copy files into /mnt/etc, skip files in "$gitdir"/etc/skel since
-	# they are named differently (eg. dotsfeed instead of .sfeed)
-	for file in $(find "$gitdir"/etc/ -type f | grep -v skel | \
+	mkdir /mnt/etc/skel/.sfeed
+	if [ -n "$librewolf_addons" ]; then
+		mkdir -p /mnt/etc/skel/.librewolf/defaultp.default/extensions
+		cp -r "$gitdir"/etc/skel/dotlibrewolf/* /mnt/etc/skel/.librewolf
+	fi
+	# Copy files into /mnt/etc
+	for file in $(find "$gitdir"/etc/ -type f | grep -v librewolf | \
 		grep -o '/etc/.*' | tr "\n" " "); do 
-		cp "$gitdir$file" "/mnt/$file"
+		newfile="$(printf "%s" "$file" | sed "s/\/dot/\/./")"
+		cp "$gitdir$file" /mnt"$newfile"
 	done
 	chmod 0400 /mnt/etc/doas.conf
 	rm /mnt/etc/bash.bash_logout
+	builddir=/mnt"$builddir"
 	mkdir -p /mnt"$vmdir" "$builddir" \
 		/mnt/usr/local/share/backgrounds /mnt/etc/skel/.sfeed
 	cp "$gitdir"/etc/skel/dotsfeed/sfeedrc /mnt/etc/skel/.sfeed/sfeedrc
+	cp -r "$gitdir"/etc/skel/dotlibrewolf /mnt/etc/skel/.librewolf
 	rm /mnt/etc/skel/.bash*
 	for srcdir in dwm dmenu st tabbed slock; do
 		git -C "$builddir" clone --depth 1 https://git.suckless.org/"$srcdir"
@@ -198,6 +331,11 @@ elif [ X"$1" = X"nochroot" ]; then
 	cp "$gitdir"/patches/sfeed-archdesktop.diff "$builddir"/sfeed
 	git -C "$builddir" clone --depth 1 https://aur.archlinux.org/yay-bin.git
 
+	awk '{print "LABEL="$1, $3, $4, $5, $6, $7}' /tmp/disk | \
+		column --table --table-columns \
+		'# <filesystem>,<mount>,<type>,<options>,<dump>,<pass>' > /mnt/etc/fstab
+	#genfstab -L /mnt > /mnt/etc/fstab
+
 	printf "\n%s" "This part of the script is done." \
 		"You will need to call this script from within the chroot with \$1 as chroot," \
 		"ie. \`/archinstall.sh chroot'" \
@@ -206,10 +344,18 @@ elif [ X"$1" = X"nochroot" ]; then
 	exec arch-chroot /mnt
 elif [ X"$1" = X"chroot" ]; then
 	netcheck
-	userquery disk rootpass user usergecos userpass 
-	
+	userquery disk timezone hostname rootpass user usergecos userpass 
+
+	sed "s/#ParallelDownloads = 5/ParallelDownloads = 4/" /etc/pacman.conf \
+		> /etc/pacman.conf.new
+	mv /etc/pacman.conf.new /etc/pacman.conf
+	mkdir -p /etc/systemd/system/tmp.mount.d
+	cat <<- EOF > /etc/systemd/system/tmp.mount.d/override.conf
+	[Mount]
+	Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=1m,noexec
+	EOF
+	ln -fs /usr/share/zoneinfo/"$timezone" /etc/localtime
 	printf "%s\n" "$hostname" > /etc/hostname
-	ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 	hwclock --systohc
 	sed "s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/g" /etc/locale.gen \
 		> /etc/locale.gen.new
@@ -250,15 +396,9 @@ elif [ X"$1" = X"chroot" ]; then
 	find "$vmdir" -type f \( -name drive -o -name drive2 \) \
 		-execdir chmod 660 {} +
 
-	for skeletons in documents downloads images; do
+	for skeletons in documents downloads images .passwords; do
 		mkdir /etc/skel/"$skeletons"
 	done
-
-	useradd -c "$usergecos" -G wheel,network,vm -m "$user"
-	printf "%s\n" "$user:$userpass" | chpasswd
-
-	pwck -s
-	grpck -s
 
 	# Accounts already locked
 	getent shadow bin vm
@@ -269,40 +409,68 @@ elif [ X"$1" = X"chroot" ]; then
 	# Create temp sudo link to prevent asking for root password
 	# since doas-sudo-shim has not been installed yet
 	ln -s /usr/bin/doas /usr/local/bin/sudo
-	export builddir
-	(cd "$builddir"/yay-bin && runuser -u bin -- makepkg --noconfirm -ci)
+	cd "$builddir"/yay-bin && runuser -u bin -- makepkg --noconfirm -ci
 	rm /usr/local/bin/sudo
 	# doas.conf only works when full pacman path is set with yay --save
 	# also doas.conf must have full pacman path or else permission denied
 	runuser -u bin -- yay --save --pacman /usr/bin/pacman
 	runuser -u bin -- yay --save --sudo doas
-	runuser -u bin -- yay --removemake --noconfirm -S devour librewolf-bin \
+	[ -z "$librewolf_addons" ] || librewolf="librewolf-bin"
+	runuser -u bin -- yay --removemake --noconfirm -S devour $librewolf \
 		otf-san-francisco-mono doas-sudo-shim xbanish
+
+	if [ -n "$librewolf_addons" ]; then
+		librewolfpath=/etc/skel/.librewolf
+		chmod -R 700 "$librewolfpath"
+		chmod 755 "$librewolfpath"/defaultp.default/extensions
+		chmod 600 "$librewolfpath"/defaultp.default/user.js
+		chmod 644 "$librewolfpath"/profiles.ini
+		cd "$librewolfpath"/defaultp.default/extensions
+		printf "\n%s\n" "Downloading LibreWolf extensions..."
+		for addon in $librewolf_addons; do
+			curl -o "$addon" "$(curl \
+				"https://addons.mozilla.org/en-US/firefox/addon/$addon/" | \
+				grep -o \
+				'https://addons.mozilla.org/firefox/downloads/file/[^"]*')"
+			newxpiname="$(unzip -p "$addon" manifest.json | \
+				grep '"id"' | cut -d \" -f 4)"
+			mv "$addon" "$newxpiname".xpi
+		done
+	fi
+
+	useradd -c "$usergecos" -G wheel,vm -m "$user"
+	printf "%s\n" "$user:$userpass" | chpasswd
+
+	pwck -s
+	grpck -s
+
 	for srcdir in dwm dmenu st tabbed slock sfeed herbe; do
 		cd "$builddir/$srcdir"
 		patch -p 1 < "$builddir/$srcdir/$srcdir-archdesktop.diff"
 		make
-		rm "$builddir/$srcdir"/config.h
 		make install
 	done
 
-	mkinitcpio -P
+	# If /usr is on its own partition, add usr module to mkinitcpio
+	if awk '{print $2}' /etc/fstab | grep '/usr\($\|/$\)' >/dev/null 2>&1
+	then
+		grep -v '\(^#\|^$\)' /etc/mkinitcpio.conf | \
+			sed "s/fsck/fsck usr/" > /etc/mkinitcpio.conf.new
+		mv /etc/mkinitcpio.conf.new /etc/mkinitcpio.conf
+		mkinitcpio -P
+	fi
+
 	partsuffix
-	if [ X"$bootmode" = X"BIOS" ]; then
-		# automkfs() function defined 
-		# partition 1 as the boot partition
+	if [ X"$bootmode" = X"bios" ]; then
 		grub-install --target=i386-pc /dev/"$diskp"1
-	elif [ X"$bootmode" = X"EFI" ]; then
-		grub-install --target=x86_64-efi --efi-directory=/boot/ \
+	elif [ X"$bootmode" = X"efi" ]; then
+		grub-install --target=x86_64-efi --efi-directory=/boot/efi \
 			--bootloader-id="Arch Linux"
-	else
-		printf "\n%s\n" \
-			"Error: GRUB did not install to /dev/$diskp""1!"
 	fi
 	# Change GRUB font size; `videoinfo' in GRUB CLI to see possible numbers
-	#sed "s/GRUB_GFXMODE=auto/GRUB_GFXMODE=640x480/" /etc/default/grub \
-		#> /etc/default/grub.new
-	#mv /etc/default/grub.new /etc/default/grub
+	sed "s/GRUB_GFXMODE=auto/GRUB_GFXMODE=640x480/" /etc/default/grub \
+		> /etc/default/grub.new
+	mv /etc/default/grub.new /etc/default/grub
 	grub-mkconfig -o /boot/grub/grub.cfg
 
 	systemctl enable NetworkManager.service xdm.service
