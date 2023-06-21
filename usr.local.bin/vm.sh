@@ -4,12 +4,6 @@ dir=/var/vm
 user=vm # Any non-root user with a shell
 export user
 
-# Find exit interface (default route with lowest metric),
-# use /usr/bin/ip since ip -c interferes with grep -o
-iface="$(/usr/bin/ip route show | grep "$(ip route show | grep default | \
-	grep -o 'metric [0-9]*' | cut -d " " -f 2 | sort | head -n 1)" | \
-	grep default | grep -o 'dev [a-z0-9]*' | cut -d " " -f 2)"
-
 # If script fails, let the user hit Enter key before exiting so they
 # have a chance to read error message(s) before terminal closes
 # (for use with dmenu(1) graphical program)
@@ -18,29 +12,33 @@ readexit() {
 	[ X"$delay" = X"delay" ] && read REPLY
 	exit "$1"
 }
+
 usage() {
 	if [ "$(find $dir/* -type d 2>/dev/null | wc -l)" -gt 1 ]; then
-		printf "%s" "Syntax error: Usage: $(basename $0) {"
+		printf "%s" "Syntax error: Usage: "$(basename $0)" {"
 		for vmdir in "$dir"/*; do
 			[ -d "$vmdir" ] && printf "%s" \
 				"$(basename "$vmdir") | "
-		done | sed s/...$//
+		done | sed "s/...$//"
 		printf "%s\n" "} [delay]"
 	else
-		printf "%s%s\n" "Syntax error: Usage: $(basename $0) " \
-			"$(basename $(find "$dir"/* -type d)) [delay]"
+		printf "%s%s\n" "Syntax error: Usage: "$(basename $0)" " \
+			"$(basename "$(find "$dir"/* -type d)") [delay]"
 	fi
 	# Script exits with qemu-system-x86_64(1) exit code if that
 	# executes so create an exit code which won't lead to ambiguity
 	readexit 248
 }
+
 note() {
 	printf "\t%s" ">> "
 }
+
 lsperm() {
 	note
 	ls -l "$1" | cut -d ' ' -f 1,3,4
 }
+
 rooterror() {
 	[ X"$1" = X"fatal" ] && printf "%s" "Fatal: "
 	printf "%s\n" "Run script non-root with sudo/doas/su -c"
@@ -153,6 +151,11 @@ if [ X"$(sysctl net.ipv6.conf.all.forwarding)" = \
 	sysctl net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
 	routing6=wasoff
 fi
+# Find exit interface (default route with lowest metric),
+# use /usr/bin/ip since ip -c interferes with grep -o
+iface="$(/usr/bin/ip route show | grep "$(ip route show | grep default | \
+	grep -o 'metric [0-9]*' | cut -d " " -f 2 | sort | head -n 1)" | \
+	grep default | grep -o 'dev [a-z0-9]*' | cut -d " " -f 2)"
 iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
 
 # Root has a hard time running GUI applications
