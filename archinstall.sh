@@ -3,7 +3,7 @@
 _gitdir='Input directory where this repo was cloned into: '
 #gitdir=
 _disk='Input target disk to install Linux: '
-#disk=
+disk=nvme0n1
 _timezone='Input your timezone (as in /usr/share/zoneinfo/): '
 #timezone=
 _hostname='Input system long hostname: '
@@ -17,6 +17,9 @@ _usergecos='Input user GECOS field: '
 _userpass='Input user password: '
 #userpass=
 
+# Comment out the next line if you want DHCP/NetworkManager to control your DNS
+force_dns="1.1.1.1 9.9.9.9"
+
 # Comment out this variable to disable LibreWolf browser installation
 librewolf_addons="ublock-origin sponsorblock istilldontcareaboutcookies
 clearurls darkreader complete-black-theme-for-firef"
@@ -26,11 +29,11 @@ netcheck() {
 	if ping -c 1 archlinux.org >/dev/null 2>&1; then
 		printf "%s\n" " ok"
 	elif ping -c 1 1.1.1.1 >/dev/null 2>&1; then
-		printf "\n%s\n" "DNS potentially is not working, exiting..."
+		printf "\n%s\n" "DNS potentially is not working, exiting."
 		exit 2
 	else
 		printf "%s\n" \
-			" ping failed, exiting..."
+			" ping failed, exiting."
 		exit 3
 	fi
 }
@@ -346,21 +349,50 @@ elif [ X"$1" = X"chroot" ]; then
 	netcheck
 	userquery disk timezone hostname rootpass user usergecos userpass 
 
+	if [ -n "$librewolf_addons" ]; then
+		librewolf="librewolf-bin"
+		librewolfpath=/etc/skel/.librewolf
+		chmod -R 700 "$librewolfpath"
+		chmod 755 "$librewolfpath"/defaultp.default/extensions
+		chmod 600 "$librewolfpath"/defaultp.default/user.js
+		chmod 644 "$librewolfpath"/profiles.ini
+		cd "$librewolfpath"/defaultp.default/extensions
+		printf "\n%s\n" "Downloading LibreWolf extensions..."
+		for addon in $librewolf_addons; do
+			curl -o "$addon" "$(curl \
+				"https://addons.mozilla.org/en-US/firefox/addon/$addon/" | \
+				grep -o \
+				'https://addons.mozilla.org/firefox/downloads/file/[^"]*')"
+			newxpiname="$(unzip -p "$addon" manifest.json | \
+				grep '"id"' | cut -d \" -f 4)"
+			mv "$addon" "$newxpiname".xpi
+		done
+	fi
+
+	if [ -n "$force_dns" ]; then
+		for nameserver in "$force_dns"; do
+			printf "%s\n" "nameserver $nameserver" > /etc/resolv.conf
+		done
+		cat <<- EOF
+		[main]
+		dns=none
+		rc-manager=unmanaged
+		EOF
+	fi
+
 	sed "s/#ParallelDownloads = 5/ParallelDownloads = 4/" /etc/pacman.conf \
 		> /etc/pacman.conf.new
 	mv /etc/pacman.conf.new /etc/pacman.conf
-	mkdir -p /etc/systemd/system/tmp.mount.d
-	cat <<- EOF > /etc/systemd/system/tmp.mount.d/override.conf
-	[Mount]
-	Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=1m,noexec
-	EOF
+
 	ln -fs /usr/share/zoneinfo/"$timezone" /etc/localtime
+
 	printf "%s\n" "$hostname" > /etc/hostname
 	hwclock --systohc
 	sed "s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/g" /etc/locale.gen \
 		> /etc/locale.gen.new
 	mv /etc/locale.gen.new /etc/locale.gen
 	locale-gen
+
 	printf "%s\n" "LANG=en_US.UTF-8" > /etc/locale.conf
 	map=/usr/share/kbd/keymaps/i386/qwerty/us.map
 	gzip -d "$map".gz
@@ -381,9 +413,14 @@ elif [ X"$1" = X"chroot" ]; then
 	alias makepkg="runuser -u bin -- makepkg"
 	alias yay="runuser -u bin -- yay"
 	EOF
+
 	# Build stuff as bin user, see /etc/doas.conf
 	# and /var/builds/.config/yay/config.json
 	usermod -c "system build user" -d "$builddir" bin
+
+	chown -R root:bin "$builddir"
+	find "$builddir" -perm 644 -execdir chmod 664 {} +
+	find "$builddir" -perm 755 -execdir chmod 775 {} +
 
 	# Create a user for vm.sh to run QEMU
 	# todo: replace vm.sh script from 
@@ -400,12 +437,15 @@ elif [ X"$1" = X"chroot" ]; then
 		mkdir /etc/skel/"$skeletons"
 	done
 
+	useradd -c "$usergecos" -G wheel,vm -m "$user"
+	printf "%s\n" "$user:$userpass" | chpasswd
+
+	pwck -s
+	grpck -s
+
 	# Accounts already locked
 	getent shadow bin vm
 
-	chown -R root:bin "$builddir"
-	find "$builddir" -perm 644 -execdir chmod 664 {} +
-	find "$builddir" -perm 755 -execdir chmod 775 {} +
 	# Create temp sudo link to prevent asking for root password
 	# since doas-sudo-shim has not been installed yet
 	ln -s /usr/bin/doas /usr/local/bin/sudo
@@ -415,34 +455,8 @@ elif [ X"$1" = X"chroot" ]; then
 	# also doas.conf must have full pacman path or else permission denied
 	runuser -u bin -- yay --save --pacman /usr/bin/pacman
 	runuser -u bin -- yay --save --sudo doas
-	[ -z "$librewolf_addons" ] || librewolf="librewolf-bin"
 	runuser -u bin -- yay --removemake --noconfirm -S devour $librewolf \
 		otf-san-francisco-mono doas-sudo-shim xbanish
-
-	if [ -n "$librewolf_addons" ]; then
-		librewolfpath=/etc/skel/.librewolf
-		chmod -R 700 "$librewolfpath"
-		chmod 755 "$librewolfpath"/defaultp.default/extensions
-		chmod 600 "$librewolfpath"/defaultp.default/user.js
-		chmod 644 "$librewolfpath"/profiles.ini
-		cd "$librewolfpath"/defaultp.default/extensions
-		printf "\n%s\n" "Downloading LibreWolf extensions..."
-		for addon in $librewolf_addons; do
-			curl -o "$addon" "$(curl \
-				"https://addons.mozilla.org/en-US/firefox/addon/$addon/" | \
-				grep -o \
-				'https://addons.mozilla.org/firefox/downloads/file/[^"]*')"
-			newxpiname="$(unzip -p "$addon" manifest.json | \
-				grep '"id"' | cut -d \" -f 4)"
-			mv "$addon" "$newxpiname".xpi
-		done
-	fi
-
-	useradd -c "$usergecos" -G wheel,vm -m "$user"
-	printf "%s\n" "$user:$userpass" | chpasswd
-
-	pwck -s
-	grpck -s
 
 	for srcdir in dwm dmenu st tabbed slock sfeed herbe; do
 		cd "$builddir/$srcdir"
@@ -473,6 +487,11 @@ elif [ X"$1" = X"chroot" ]; then
 	mv /etc/default/grub.new /etc/default/grub
 	grub-mkconfig -o /boot/grub/grub.cfg
 
+	mkdir -p /etc/systemd/system/tmp.mount.d
+	cat <<- EOF > /etc/systemd/system/tmp.mount.d/override.conf
+	[Mount]
+	Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=1m,noexec
+	EOF
 	systemctl enable NetworkManager.service xdm.service
 
 	printf "%s\n" "" "Arch Linux installation script completed." \
