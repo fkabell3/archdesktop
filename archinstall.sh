@@ -3,7 +3,7 @@
 _gitdir='Input directory where this repo was cloned into: '
 #gitdir=
 _disk='Input target disk to install Linux: '
-disk=nvme0n1
+#disk=
 _timezone='Input your timezone (as in /usr/share/zoneinfo/): '
 #timezone=
 _hostname='Input system long hostname: '
