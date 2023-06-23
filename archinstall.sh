@@ -205,7 +205,6 @@ elif [ X"$1" = X"nochroot" ]; then
 			'# <label>,<size>,<mount>,<fs>,<options>,<dump>,<pass>' \
 			< /tmp/disk >> /tmp/disk.swap
 		free="$storage"
-		#for number in $(awk '{print $2}' /tmp/disk | grep '[0-9]'); do
 		for number in $(awk '{print $2}' /tmp/disk); do
 			free=$((free - number))
 		done
@@ -284,6 +283,14 @@ elif [ X"$1" = X"nochroot" ]; then
 	video_drivers_pkgs="xf86-video-fbdev xf86-video-intel xf86-video-vesa"
 	devel_pkgs="$(pacman -Si base-devel | grep "Depends On" | cut -d : -f 2 | \
 		sed "s/sudo//")"
+	# Install base-devel dependencies except sudo
+	# (we use doas & doas-sudo-shim instead)
+	devel_pkgs="$(pacman -Si base-devel | awk '
+		/Depends On/ {
+			for (x = 4; x < NF; x++)
+				if ($x !~ /sudo/)
+					printf("%s ", $x)
+		}')"
 	[ X"$bootmode" = X"efi" ] && uefi_pkgs=efibootmgr
 	[ -z "$librewolf_addons" ] || browser_pkgs="unzip"
 	pacstrap /mnt $system_pkgs $network_pkgs $doc_pkgs $gui_pkgs $vm_pkgs \
@@ -295,7 +302,7 @@ elif [ X"$1" = X"nochroot" ]; then
 	else
 		printf "%s\n" "" \
 			"pacstrap failed with exit $pacstatus." \
-			"Reboot and try script again. Sorry!"
+			"Reboot and try script again. Sorry!" >&2
 		exit 4
 	fi
 
@@ -349,6 +356,17 @@ elif [ X"$1" = X"chroot" ]; then
 	netcheck
 	userquery disk timezone hostname rootpass user usergecos userpass 
 
+	if [ -n "$force_dns" ]; then
+		for nameserver in "$force_dns"; do
+			printf "%s\n" "nameserver $nameserver" > /etc/resolv.conf
+		done
+		cat <<- EOF > /etc/NetworkManager/NetworkManager.conf
+		[main]
+		dns=none
+		rc-manager=unmanaged
+		EOF
+	fi
+
 	if [ -n "$librewolf_addons" ]; then
 		librewolf="librewolf-bin"
 		librewolfpath=/etc/skel/.librewolf
@@ -367,17 +385,6 @@ elif [ X"$1" = X"chroot" ]; then
 				grep '"id"' | cut -d \" -f 4)"
 			mv "$addon" "$newxpiname".xpi
 		done
-	fi
-
-	if [ -n "$force_dns" ]; then
-		for nameserver in "$force_dns"; do
-			printf "%s\n" "nameserver $nameserver" > /etc/resolv.conf
-		done
-		cat <<- EOF
-		[main]
-		dns=none
-		rc-manager=unmanaged
-		EOF
 	fi
 
 	sed "s/#ParallelDownloads = 5/ParallelDownloads = 4/" /etc/pacman.conf \

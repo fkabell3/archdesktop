@@ -15,6 +15,7 @@ All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is
 Non-GUI features include:<br>
 * doas instead of sudo (with shim installed), `/bin/sh -> dash`
 * Transparent priviledge dropping when running `makepkg` or `yay` as root
+* Force a good choice of DNS nameservers (1.1.1.1/9.9.9.9); ignore DHCP DNS
 
 Installation Instructions:
 * [Download](https://archlinux.org/download/), burn, and boot into an Arch Linux installation enviroment.
