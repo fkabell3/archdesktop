@@ -1,6 +1,7 @@
 #!/bin/sh
 
-dir=~/.sfeed
+dir="$HOME"/.sfeed
+
 lsfeed() {
 	sfeed_plain_trimmed "$dir/feeds/$feed"
 }
