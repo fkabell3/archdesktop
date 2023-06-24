@@ -4,7 +4,7 @@ dir="$HOME"/.passwords
 field=5
 
 copy() {
-	xclip -selection CLIPBOARD
+	xclip -selection clipboard
 }
 
 cat "$dir/$(find $dir -type f | cut -d / -f "$field"- | sort | \
