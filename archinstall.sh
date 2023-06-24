@@ -17,7 +17,7 @@ _usergecos='Input user GECOS field: '
 _userpass='Input user password: '
 #userpass=
 
-# Comment out the next line if you want DHCP/NetworkManager to control your DNS
+# Comment out the next line if you want DHCP to control your DNS
 force_dns="1.1.1.1 9.9.9.9"
 
 # Comment out this variable to disable LibreWolf browser installation
@@ -29,11 +29,11 @@ netcheck() {
 	if ping -c 1 archlinux.org >/dev/null 2>&1; then
 		printf "%s\n" " ok"
 	elif ping -c 1 1.1.1.1 >/dev/null 2>&1; then
-		printf "\n%s\n" "DNS potentially is not working, exiting."
+		printf "\n%s\n" "DNS potentially is not working, exiting." >&2
 		exit 2
 	else
 		printf "%s\n" \
-			" ping failed, exiting."
+			" ping failed, exiting." >&2
 		exit 3
 	fi
 }
@@ -357,14 +357,11 @@ elif [ X"$1" = X"chroot" ]; then
 	userquery disk timezone hostname rootpass user usergecos userpass 
 
 	if [ -n "$force_dns" ]; then
-		for nameserver in "$force_dns"; do
-			printf "%s\n" "nameserver $nameserver" > /etc/resolv.conf
-		done
-		cat <<- EOF > /etc/NetworkManager/NetworkManager.conf
-		[main]
-		dns=none
-		rc-manager=unmanaged
-		EOF
+		dnsconf="/etc/NetworkManager/conf.d/dns-servers.conf"
+		printf "%s\n%s" "[global-dns-domain-*]" "servers=" > "$dnsconf"
+		for nameserver in $force_dns; do
+			printf "%s" "$nameserver,"
+		done | sed "s/.$/\n/" >> "$dnsconf"
 	fi
 
 	if [ -n "$librewolf_addons" ]; then
@@ -499,6 +496,7 @@ elif [ X"$1" = X"chroot" ]; then
 	[Mount]
 	Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=1m,noexec
 	EOF
+
 	systemctl enable NetworkManager.service xdm.service
 
 	printf "%s\n" "" "Arch Linux installation script completed." \
