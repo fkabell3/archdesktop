@@ -1,6 +1,6 @@
 #!/bin/sh
 
-dir="$HOME"/images
+dir=~/images
 
 if [ -f "$dir"/screenshot"$(date +"%d%b%g")" ]; then
 	datetime=$(date +"%d%b%g-%T")
