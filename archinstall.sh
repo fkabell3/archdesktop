@@ -281,16 +281,10 @@ elif [ X"$1" = X"nochroot" ]; then
 	# Xorg log complained about these three not being installed on
 	# Framework/Librem 14, spikes CPU if (one or all?) not installed
 	video_drivers_pkgs="xf86-video-fbdev xf86-video-intel xf86-video-vesa"
-	devel_pkgs="$(pacman -Si base-devel | grep "Depends On" | cut -d : -f 2 | \
-		sed "s/sudo//")"
 	# Install base-devel dependencies except sudo
 	# (we use doas & doas-sudo-shim instead)
-	devel_pkgs="$(pacman -Si base-devel | awk '
-		/Depends On/ {
-			for (x = 4; x < NF; x++)
-				if ($x !~ /sudo/)
-					printf("%s ", $x)
-		}')"
+	devel_pkgs="$(pacman -Si base-devel | grep "Depends On" | cut -d : -f 2 | \
+		sed "s/sudo//")"
 	[ X"$bootmode" = X"efi" ] && uefi_pkgs=efibootmgr
 	[ -z "$librewolf_addons" ] || browser_pkgs="unzip"
 	pacstrap /mnt $system_pkgs $network_pkgs $doc_pkgs $gui_pkgs $vm_pkgs \
