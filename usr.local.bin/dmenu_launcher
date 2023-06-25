@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -x
-
 while true; do
 	action="$(printf "%s\n" \
 		"Browser" \
