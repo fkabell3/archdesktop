@@ -16,7 +16,7 @@ while true; do
 	
 	case "$action" in
 		"Browser") exec $BROWSER;;
-		"RSS") dmenu_rss && exit "$?";;
+		"RSS") dmenu_rss && exit 0;;
 		"Terminal") exec tabbed -g 1200x750 -r 2 st -w '';;
 		"Sound") exec st -w '' alsamixer;;
 		"Networking") exec st -w '' nmtui;;
@@ -24,8 +24,8 @@ while true; do
 			"$(for vmdir in /var/vm/*; do
 			[ -d "$vmdir" ] && basename "$vmdir"
 		done | dmenu -i -l "$DMENULINENUM")" delay;;
-		"Passwords") dmenu_passwd && exit "$?";;
-		"Display") dmenu_display && exit "$?";;
-		"System") dmenu_system && exit "$?";;
+		"Passwords") dmenu_passwd && exit 0;;
+		"Display") dmenu_display && exit 0;;
+		"System") dmenu_system && exit 0;;
 	esac
 done
