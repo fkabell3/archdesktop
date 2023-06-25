@@ -1,141 +1,183 @@
 #!/bin/sh
 
-dir=/var/vm
-user=vm # Any non-root user with a shell
-export user
+user=vm
+dir="$(getent passwd vm | awk -F : '{ print $6 }')"
 
-# If script fails, let the user hit Enter key before exiting so they
-# have a chance to read error message(s) before terminal closes
-# (for use with dmenu(1) graphical program)
-delay="$2"
-readexit() {
-	[ X"$delay" = X"delay" ] && read REPLY
-	exit "$1"
-}
+# Resources allocated to guest
+mebis=8192
+vcpu=8
+
+# Guess the Xorg display (not necessary if
+# running from the graphical user with doas)
+if [ -z "$DISPLAY" ]; then
+	DISPLAY="$(who | grep -o '(:[0-9]*)' | grep -o ':[0-9]*')"
+	if [ -z "$DISPLAY" ]; then
+		DISPLAY=":0"
+	fi
+	export DISPLAY
+fi
+
+# Guess the exit interface (default route with lowest metric)
+iface="$(awk '$2 == 00000000 { print $7, $1 }' /proc/net/route | sort | \
+	awk 'NR == 1 { print $2 }')"
 
 usage() {
-	if [ "$(find $dir/* -type d 2>/dev/null | wc -l)" -gt 1 ]; then
-		printf "%s" "Syntax error: Usage: "$(basename $0)" {"
+	printf "%s" "Syntax error: Usage: $(basename "$0") "
+	if [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -eq 1 ]; then
+		printf "%s" "<subdirectory>"
+	elif [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -eq 2 ]; then
+		printf "%s" "$(basename $dir/*)"
+	elif [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -ge 3 ]; then
+		printf "%s" "{"
 		for vmdir in "$dir"/*; do
-			[ -d "$vmdir" ] && printf "%s" \
-				"$(basename "$vmdir") | "
+			[ -d "$vmdir" ] && printf "%s" "$(basename "$vmdir") | "
 		done | sed "s/...$//"
-		printf "%s\n" "} [delay]"
-	else
-		printf "%s%s\n" "Syntax error: Usage: "$(basename $0)" " \
-			"$(basename "$(find "$dir"/* -type d)") [delay]"
+		printf "%s" "}"
 	fi
-	# Script exits with qemu-system-x86_64(1) exit code if that
-	# executes so create an exit code which won't lead to ambiguity
-	readexit 248
+	printf "%s\n" " [delay]"
+	delayexit 255
 }
 
-note() {
-	printf "\t%s" ">> "
+privdrop() {
+	runuser -u "$user" -- "$@"
+}
+
+ckperm() {
+	file="$1"
+	case "$file" in
+		*iso) write=0
+			existseverity=warning
+			permseverity=warning
+			status=252;;
+		*drive) write=1
+			existseverity=fatal
+			permseverity=fatal
+			status=253;;
+		*drive2) write=1
+			existseverity=informational
+			permseverity=warning
+			status=254;;
+	esac
+	if [ -f "$file" ]; then
+		if [ "$write" -eq 1 ]; then
+			if ! privdrop [ -r "$file" ] && ! privdrop [ -w "$file" ]; then
+				log "$permseverity" \
+					"User $user can't read or write to $file."
+				lsperm "$file"
+				if [ X"$permseverity" = X"fatal" ]; then
+					delayexit "$status"
+				else
+					return "$status"
+				fi
+			elif ! privdrop [ -w "$file" ]; then
+				log "$permseverity" \
+					"User $user can't write to $file."
+				lsperm "$file"
+				if [ X"$permseverity" = X"fatal" ]; then
+					delayexit "$status"
+				else
+					return "$status"
+				fi
+			fi
+		fi
+		if ! privdrop [ -r "$file" ]; then
+			log "$permseverity" "User $user can't read $file."
+			lsperm "$file"
+			if [ X"$permseverity" = X"fatal" ]; then
+				delayexit "$status"
+			else
+				return "$status"
+			fi
+		fi
+	else
+		[ X"$existseverity" = X"informational" ] || \
+			log "$existseverity" "File $file does not exist."
+			lsperm "$file"
+			if [ X"$permseverity" = X"fatal" ]; then
+				delayexit "$status"
+			else
+				return "$status"
+			fi
+	fi
 }
 
 lsperm() {
-	note
+	printf "\t%s" ">> "
 	ls -l "$1" | cut -d ' ' -f 1,3,4
 }
 
-rooterror() {
-	[ X"$1" = X"fatal" ] && printf "%s" "Fatal: "
-	printf "%s\n" "Run script non-root with sudo/doas/su -c"
+log() {
+	case "$1" in
+		informational) printf "%s\n" "$2";;
+		warning) printf "%s" "Warning: "
+			printf "%s\n" "$2" >&2;;
+		fatal) printf "%s" "Fatal: "
+			printf "%s\n" "$2" >&2;;
+	esac
 }
 
-if [ -n "$1" ] && [ -d "$dir/$1" ]; then
-	vm="$dir/$1"
-elif ! [ -d "$dir" ]; then
-	printf "%s\n" "Fatal: $dir/ does not exist."
-	readexit 249
-elif [ -f "$dir/$1" ]; then
-	printf "%s\n\t%s\n\t%s\n\t%s\n" \
-		"Fatal: $dir/$1 is a file but should be a subdirectory which" \
-			"1) must contain a file named \`drive', " \
-			"2) likely should contain an .iso file," \
-			"3) optionally contains a file named \`drive2'"
-	readexit 250
-elif find "$dir"/* -type d 2>/dev/null | grep . >/dev/null 2>&1; then
-	usage
-elif ! find "$dir/$1" >/dev/null 2>&1; then
-	usage
-else
-	printf "%s\n" "Fatal: $dir/ has no subdirectories."
-	readexit 251
-fi
-
-if ! [ X"$(whoami)" = X"root" ]; then
-	rooterror fatal
-       	readexit 252
-fi
-
-# Don't make the `-cdrom' argument crash qemu-system-x86_64(1).
-# `-cdrom' with no extra argument will interpret the next line
-# (such as `-drive') as an .iso file. If $_cdrom is blank,
-# then so is $iso.
-_cdrom=
-if ! iso=$(ls "$vm"/*.iso 2>/dev/null); then
-	printf "%s\n" "Warning: $vm/ has no .iso files"
-	iso=
-	export iso
-else
-	export iso
-	r_iso="$(su -c -u $user \
-		'[ -r "$iso" ] || printf "%s%s\n\t%s\n" "Warning: User $user " \
-			"likely needs read permissions to" "$iso"')"
-	if [ -n "$r_iso" ]; then
-		printf "%s\n" "$r_iso"
-		lsperm "$iso"
-		iso=
-	else
-		_cdrom="-cdrom"
+# Let the user hit Enter key before exiting so user has
+# a chance to read log message(s) before terminal closes
+# (for use with dmenu(1) graphical program)
+delay="$2"
+delayexit() {
+	if [ X"$delay" = X"delay" ]; then
+		read REPLY
 	fi
+	exit "$1"
+}
 
+rm -rf "$dir"/.cache
+
+if [ -d "$dir" ]; then
+	if [ "$(find "$dir" -type d | wc -l)" -gt 1 ]; then
+		if [ -n "$1" ]; then
+			if [ X"$1" = X"delay" ]; then
+				usage
+			elif [ -d "$dir/$1" ]; then
+				vm="$dir/$1"
+			elif [ -f "$dir/$1" ]; then
+				log fatal \
+					"$dir/$1 should be a subdirectory, not a file."
+				delayexit 239
+			else
+				usage
+			fi
+		else
+			usage
+		fi
+	else
+		log fatal "$dir/ has no subdirectories."
+		delayexit 238
+	fi
+elif [ -f "$dir" ]; then
+	log fatal "$dir should be a directory, not a file."
+	delayexit 237
+else
+	log fatal "$dir/ directory does not exist."
+	delayexit 236
 fi
 
 drive="$vm/drive"
-if [ -f "$drive" ]; then
-	export drive
-	rw_drive="$(su -c -u $user \
-		'if ! [ -w "$drive" ] || ! [ -r "$drive" ]; then
-			printf "%s%s\n\t%s\n" "Fatal: User $user needs read " \
-				"and write permissions to" "$drive"
-		fi')"
-	if [ -n "$rw_drive" ] ; then
-		printf "%s\n" "$rw_drive"
-		lsperm "$drive"
-		readexit 253
-	fi
-else
-		printf "%s\n" "Fatal: $drive does not exist"
-		readexit 254
-fi
-
-_drive=
 drive2="$vm/drive2"
-if [ -f "$drive2" ]; then
-	export drive2
-	rw_drive2="$(su -c -u $user \
-		'if ! [ -w "$drive2" ] || ! [ -r "$drive" ]; then
-			printf "%s%s\n\t%s\n" "Warning: User $user likely " \
-				"needs read and write permissions to" "$drive2"
-		fi')"
-	if [ -n "$rw_drive2" ]; then
-		printf "%s\n" "$rw_drive2"
-		lsperm "$drive2"
-	else
-		_drive="-drive"
-		drive2="file=$drive2,format=raw"
-	fi
+iso="$(find "$vm" -type f -name *.iso | head -n 1)"
+
+ckperm "$drive"
+if ckperm "$drive2"; then
+	_drive="-drive"
+	drive2="file="$drive2",format=raw"
 else
 	drive2=
 fi
+if ckperm "$iso"; then
+	_cdrom="-cdrom"
+else
+	iso=
+fi
 
+log informational "Initializing $1 virtual machine..."
 
-printf "%s\n" "Initializing $1 virtual machine..."
-
-printf "%s\n" "Configuring network"
+log informational "Configuring network"
 # Disable VPN here
 brctl addbr virbr0
 ip addr flush dev virbr0
@@ -151,36 +193,29 @@ if [ X"$(sysctl net.ipv6.conf.all.forwarding)" = \
 	sysctl net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
 	routing6=wasoff
 fi
-# Find exit interface (default route with lowest metric),
-# use /usr/bin/ip since ip -c interferes with grep -o
-iface="$(/usr/bin/ip route show | grep "$(ip route show | grep default | \
-	grep -o 'metric [0-9]*' | cut -d " " -f 2 | sort | head -n 1)" | \
-	grep default | grep -o 'dev [a-z0-9]*' | cut -d " " -f 2)"
 iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
 
-# Root has a hard time running GUI applications
-export _drive drive2 _cdrom
-su -c -u "$user" 'devour qemu-system-x86_64 \
+privdrop devour qemu-system-x86_64 \
 	-enable-kvm \
-	-m 8192 \
-	-smp 12 \
+	-m "$mebis" \
+	-smp "$vcpu" \
 	-display gtk,zoom-to-fit=on \
 	-nic bridge,br=virbr0 \
 	-drive file="$drive",format=raw \
 	"$_drive" "$drive2" \
-	"$_cdrom" "$iso"' \
+	"$_cdrom" "$iso" \
        	>/dev/null 2>&1
 
 status="$?"
 
 case "$status" in
 	# This condition (0) does not guarantee success
-	0) printf "%s\n" "Virtual machine shutdown!";;
-	139) printf "%s\n" "Fatal: Virtual Machine GUI failed!";;
-	*) printf "%s\n" "Virtual machine failed!";;
+	0) log informational "Virtual machine shutdown!";;
+	139) log fatal "Virtual Machine GUI failed!";;
+	*) log fatal "Virtual machine failed!";;
 esac
 
-printf "%s\n" "Undoing network config changes"
+log informational "Undoing network config changes"
 # Re-enable VPN here
 ip link set virbr0 down
 brctl delbr virbr0
@@ -190,10 +225,11 @@ brctl delbr virbr0
 
 case "$status" in
 	0) exit "$status";;
-	139) printf "%s\n" "Root likely not permitted by X access control list"
-	note
-	printf "%s\n" \
-		"try executing \`xhost +local:' from the graphical user"
-		rooterror;;
+	139) if [ -z "$DISPLAY" ]; then
+			log informational "\$DISPLAY is not set."
+		else
+			log informational "Likely either \$DISPLAY is incorrectly set or"
+			log informational "root is denied by X access control (xhost(1))."
+		fi;;
 esac
-readexit "$status"
+delayexit "$status"

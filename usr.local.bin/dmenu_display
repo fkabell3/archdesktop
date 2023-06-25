@@ -1,0 +1,17 @@
+#!/bin/sh
+
+while true; do
+	action="$(printf "%s\n" \
+		"Brightness" \
+		"Screenshot" \
+		"Lock Screen" | \
+		dmenu -i -l "$DMENULINENUM")"
+
+	[ -z "$action" ] && exit 1
+	
+	case "$action" in
+		"Brightness") dmenu_brightness;;
+		"Screenshot") dmenu_screenshot && exit "$?";;
+		"Lock Screen") slock && exit "$?";;
+	esac 
+done

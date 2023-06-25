@@ -1,0 +1,17 @@
+#!/bin/sh
+
+min=15
+increment=5
+
+display="$(xrandr | awk '/ connected/ { print $1 }')"
+
+x="$min"
+level="$(while [ "$x" -le 100 ]; do
+	printf "%s\n" "$x"
+	x=$((x + increment))
+done | dmenu -i -l "$DMENULINENUM")"
+brightness="$(awk "BEGIN { print $level/100 }")"
+
+xrandr --output "$display" --brightness "$brightness"
+
+exit "$?"

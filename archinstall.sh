@@ -275,8 +275,8 @@ elif [ X"$1" = X"nochroot" ]; then
 	network_pkgs="networkmanager openresolv"
 	doc_pkgs="man-db man-pages"
 	gui_pkgs="alsa-utils picom scrot xclip xclip xdotool xorg-server
-	xorg-xdm xorg-xhost xorg-xinit xorg-xsetroot xwallpaper imlib2 libx11
-	libxft libxinerama"
+	xorg-xdm xorg-xhost xorg-xinit xorg-xrandr xorg-xsetroot xwallpaper
+	imlib2 libx11 libxft libxinerama"
 	vm_pkgs="bridge-utils qemu-system-x86 qemu-ui-gtk"
 	# Xorg log complained about these three not being installed on
 	# Framework/Librem 14, spikes CPU if (one or all?) not installed
@@ -427,9 +427,7 @@ elif [ X"$1" = X"chroot" ]; then
 	find "$builddir" -perm 755 -execdir chmod 775 {} +
 
 	# Create a user for vm.sh to run QEMU
-	# todo: replace vm.sh script from 
-	# su to doas/runuser and then take away shell
-	useradd -c "vm.sh user" -d "$vmdir" -r -s /bin/sh vm
+	useradd -c "vm.sh user" -d "$vmdir" -r -s /usr/bin/nologin vm
 	# If user backed up virtual machines, give correct perms for vm.sh
 	chown -R root:vm "$vmdir"
 	find "$vmdir" -type d -execdir chmod 770 {} + || chmod -R 770 "$vmdir"
