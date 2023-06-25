@@ -26,7 +26,7 @@ while true; do
 			"$(for vmdir in /var/vm/*; do
 			[ -d "$vmdir" ] && basename "$vmdir"
 		done | dmenu -i -l "$DMENULINENUM")" delay;;
-		"Passwords") dmenu_passwd;;
+		"Passwords") dmenu_passwd && exit "$?";;
 		"Display") dmenu_display && exit "$?";;
 		"System") dmenu_system && exit "$?";;
 	esac
