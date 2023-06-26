@@ -13,6 +13,10 @@ PAGER=/bin/less
 SYSTEMD_PAGER=
 export EDITOR PAGER SYSTEMD_PAGER
 
+# Combine history across TTYs
+#PROMPT_COMMAND="history -a; history -c; history -r"
+HISTCONTROL=ignoredups:erasedups
+
 alias ls="ls -F --color=auto"
 alias ll="ls -hl"
 alias grep="grep --color=auto"
