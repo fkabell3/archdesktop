@@ -10,7 +10,7 @@ vcpu=8
 # Guess the Xorg display (not necessary if
 # running from the graphical user with doas)
 if [ -z "$DISPLAY" ]; then
-	DISPLAY="$(who | grep '(:[0-9]*)' | grep -o ':[0-9]*')"
+	DISPLAY="$(who | grep -o '(:[0-9]*)' | grep -o ':[0-9]*')"
 	if [ -z "$DISPLAY" ]; then
 		DISPLAY=":0"
 	fi
@@ -33,7 +33,7 @@ usage() {
 			[ -d "$vmdir" ] && printf "%s" "$(basename "$vmdir") | "
 		done | sed "s/...$/}/"
 	fi
-	printf "%s\n" " [delay]"
+	printf "%s\n" " {cli | gui} [delay]"
 	delayexit 255
 }
 
@@ -130,8 +130,8 @@ delayexit() {
 }
 
 if [ X"$(whoami)" != X"root" ]; then
-      log fatal "Must be superuser."
-      delayexit 254
+	log fatal "Must be superuser."
+	delayexit 254
 fi
 
 rm -rf "$dir"/.cache
@@ -208,14 +208,14 @@ fi
 
 privdrop devour qemu-system-x86_64 \
 	-enable-kvm \
+	-display gtk \
 	-m "$mebis" \
 	-smp "$vcpu" \
-	-display gtk \
 	-nic bridge,br=virbr0 \
 	-drive file="$drive",format=raw \
 	"$_drive" "$drive2" \
-	"$_cdrom" "$iso" \
-       	>/dev/null 2>&1
+	"$_cdrom" "$iso" 
+	#-nographic \
 
 status="$?"
 
