@@ -33,7 +33,7 @@ usage() {
 			[ -d "$vmdir" ] && printf "%s" "$(basename "$vmdir") | "
 		done | sed "s/...$/}/"
 	fi
-	printf "%s\n" " {cli | gui} [delay]"
+	printf "%s\n" " [delay]"
 	delayexit 255
 }
 
