@@ -1,7 +1,7 @@
 #!/bin/sh
 
 user=vm
-dir="$(getent passwd vm | awk -F : '{ print $6 }')"
+dir="$(getent passwd "$user" | awk -F : '{ print $6 }')"
 
 # Resources allocated to guest
 mebis=8192
@@ -10,7 +10,7 @@ vcpu=8
 # Guess the Xorg display (not necessary if
 # running from the graphical user with doas)
 if [ -z "$DISPLAY" ]; then
-	DISPLAY="$(who | grep -o '(:[0-9]*)' | grep -o ':[0-9]*')"
+	DISPLAY="$(who | grep '(:[0-9]*)' | grep -o ':[0-9]*')"
 	if [ -z "$DISPLAY" ]; then
 		DISPLAY=":0"
 	fi
@@ -31,10 +31,9 @@ usage() {
 		printf "%s" "{"
 		for vmdir in "$dir"/*; do
 			[ -d "$vmdir" ] && printf "%s" "$(basename "$vmdir") | "
-		done | sed "s/...$//"
-		printf "%s" "}"
+		done | sed "s/...$/}/"
 	fi
-	printf "%s\n" " [delay]"
+	printf "%s\n" " {cli | gui} [delay]"
 	delayexit 255
 }
 
@@ -45,7 +44,7 @@ privdrop() {
 ckperm() {
 	file="$1"
 	case "$file" in
-		*iso) write=0
+		""|*iso) write=0
 			existseverity=warning
 			permseverity=warning
 			status=252;;
@@ -91,9 +90,12 @@ ckperm() {
 		fi
 	else
 		[ X"$existseverity" = X"informational" ] || \
-			log "$existseverity" "File $file does not exist."
-			lsperm "$file"
-			if [ X"$permseverity" = X"fatal" ]; then
+			if [ -z "$file" ]; then
+				log "$existseverity" "No .iso file exist."
+			else
+				log "$existseverity" "File $file does not exist."
+			fi
+			if [ X"$existseverity" = X"fatal" ]; then
 				delayexit "$status"
 			else
 				return "$status"
@@ -193,7 +195,11 @@ if [ X"$(sysctl net.ipv6.conf.all.forwarding)" = \
 	sysctl net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
 	routing6=wasoff
 fi
-iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
+if [ -z "$iface" ]; then
+	log warning "No exit interface detected."
+else
+	iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
+fi
 
 privdrop devour qemu-system-x86_64 \
 	-enable-kvm \
