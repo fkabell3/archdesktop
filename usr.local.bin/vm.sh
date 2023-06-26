@@ -33,7 +33,7 @@ usage() {
 			[ -d "$vmdir" ] && printf "%s" "$(basename "$vmdir") | "
 		done | sed "s/...$/}/"
 	fi
-	printf "%s\n" " {cli | gui} [delay]"
+	printf "%s\n" " [delay]"
 	delayexit 255
 }
 
@@ -129,6 +129,11 @@ delayexit() {
 	exit "$1"
 }
 
+if [ X"$(whoami)" != X"root" ]; then
+      log fatal "Must be superuser."
+      delayexit 254
+fi
+
 rm -rf "$dir"/.cache
 
 if [ -d "$dir" ]; then
@@ -205,7 +210,7 @@ privdrop devour qemu-system-x86_64 \
 	-enable-kvm \
 	-m "$mebis" \
 	-smp "$vcpu" \
-	-display gtk,zoom-to-fit=on \
+	-display gtk \
 	-nic bridge,br=virbr0 \
 	-drive file="$drive",format=raw \
 	"$_drive" "$drive2" \
