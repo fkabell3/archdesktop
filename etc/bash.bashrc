@@ -13,10 +13,6 @@ PAGER=/bin/less
 SYSTEMD_PAGER=
 export EDITOR PAGER SYSTEMD_PAGER
 
-# Combine history across TTYs
-#PROMPT_COMMAND="history -a; history -c; history -r"
-HISTCONTROL=ignoredups:erasedups
-
 alias ls="ls -F --color=auto"
 alias ll="ls -hl"
 alias grep="grep --color=auto"
@@ -24,6 +20,10 @@ alias which="which 2>/dev/null"
 alias ip="ip -c"
 alias copy="xclip -selection clipboard"
 alias paste="xclip -o -selection clipboard"
+
+# Combine history across TTYs
+#PROMPT_COMMAND="history -a; history -c; history -r"
+HISTCONTROL=ignoredups:erasedups
 
 _ps() {
 	case "$1" in
