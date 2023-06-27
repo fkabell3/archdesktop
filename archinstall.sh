@@ -132,17 +132,14 @@ vmdir=/var/vm
 
 if [ -d /sys/firmware/efi/efivars ]; then
        	bootmode=efi
-else
-	bootmode=bios
-fi
-
-if [ X"$bootmode" = X"efi" ]; then
 	if true; then
 		disklabel=gpt
 	else
+		# Deactivated for now
 		disklabel=pmbr
 	fi
-elif [ X"$bootmode" = X"bios" ]; then
+else
+	bootmode=bios
 	disklabel=mbr
 fi
 
@@ -166,7 +163,7 @@ elif [ X"$1" = X"nochroot" ]; then
 	# The whole autosize section needs to be reworked for better numbers
 	# Could not find swap algorithm which took both RAM and storage as input
 	swapmax=$((storage / 16))
-	# <min> or <max> can be NULL (only with `free')
+	# <max> can be NULL (only with `free')
 	# autosize() <label>   <total|free>  <denominator>     <min>  <max>
 	autosize     swap      total         "$ram"            1      "$swapmax"
 	autosize     rootfs    free          4                 8      32
@@ -323,7 +320,6 @@ elif [ X"$1" = X"nochroot" ]; then
 	mkdir -p /mnt"$vmdir" "$builddir" \
 		/mnt/usr/local/share/backgrounds /mnt/etc/skel/.sfeed
 	cp "$gitdir"/etc/skel/dotsfeed/sfeedrc /mnt/etc/skel/.sfeed/sfeedrc
-	cp -r "$gitdir"/etc/skel/dotlibrewolf /mnt/etc/skel/.librewolf
 	rm /mnt/etc/skel/.bash*
 	for srcdir in dwm dmenu st tabbed slock; do
 		git -C "$builddir" clone --depth 1 https://git.suckless.org/"$srcdir"
@@ -472,6 +468,7 @@ elif [ X"$1" = X"chroot" ]; then
 
 	partsuffix
 	if [ X"$bootmode" = X"bios" ]; then
+		# Fix me
 		grub-install --target=i386-pc /dev/"$diskp"1
 	elif [ X"$bootmode" = X"efi" ]; then
 		grub-install --target=x86_64-efi --efi-directory=/boot/efi \
