@@ -215,7 +215,6 @@ privdrop devour qemu-system-x86_64 \
 	-drive file="$drive",format=raw \
 	"$_drive" "$drive2" \
 	"$_cdrom" "$iso" 
-	#-nographic \
 
 status="$?"
 
