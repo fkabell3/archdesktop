@@ -7,8 +7,8 @@ copy() {
 	xclip -selection clipboard
 }
 
-cat "$dir/$(find "$dir" -type f | cut -d / -f "$field"- | sort | \
-	dmenu -i -l "$DMENULINENUM")" | grep -v '^#' | copy
+grep -v '^#' "$dir/$(find "$dir" -type f | cut -d / -f "$field"- | sort | \
+	dmenu -i -l "$DMENULINENUM")" | copy
 
 # Clear clipboard after 30 seconds
 sleep 30
