@@ -88,12 +88,42 @@ autosize() {
 }
 
 autodisk() {
+	if [ X"$disklabel" = X"gpt" ]; then
+		case "$3" in
+			# Linux swap
+			none|swap) code=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F;;
+			# Linux root (x86-64)
+			/) code=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709;;
+			# Linux extended boot
+			/boot) code=BC13C2FF-59E6-4262-A352-B275FD6F7172;;
+			# EFI System
+			/boot/efi) code=C12A7328-F81F-11D2-BA4B-00A0C93EC93B;;
+			# Linux /usr (x86-64)
+			/usr) code=8484680C-9521-48C6-9C11-B0720656F69E;;
+			# Linux variable data
+			/var) code=4D21B016-B534-45C2-A9FB-5C16E091FD2D;;
+			# Linux temporary data
+			/var/tmp) code=7EC6F557-3BC5-4ACA-B293-16EF5DF639D1;; 
+ 			# Linux home
+			/home) code=773f91ef-66d4-49b5-bd83-d683bf40ad16;;
+			# Linux filesystem
+			*) code=0FC63DAF-8483-4772-8E79-3D69D8477DE4;;
+		esac
+	elif [ X"$disklabel" = X"mbr" ]; then
+		bootable="-"
+		case "$3" in
+			none|swap) code=82;;	# Linux swap / Solaris
+			/boot) code=0c		# W95 FAT32 (LBA)
+				bootable="*";;
+			*) code=83;;		# Linux
+		esac
+	fi
 	if [ X"$disklabel" = X"mbr" ] && [ "$partnum" -eq 4 ]; then
-		printf "%s\n" ",,Ex;"
+		printf "%s\n" ",,05,-;"		# Linux extended
 		partnum=$((partnum + 1))
 	fi
 	size=$(($2 * sectorspergibi))
-	printf "%s\n" ",$size,$code;"
+	printf "%s\n" ",$size,$code,$bootable;"
 	partnum=$((partnum + 1))
 }
 
@@ -417,7 +447,7 @@ elif [ X"$1" = X"chroot" ]; then
 	find "$builddir" -perm 755 -execdir chmod 775 {} +
 
 	# Create a user for vm.sh to run QEMU
-	useradd -c "vm.sh user" -d "$vmdir" -r -s /usr/bin/nologin vm
+	useradd -c "vm.sh user" -d "$vmdir" -p "!*" -r -s /usr/bin/nologin vm
 	# If user backed up virtual machines, give correct perms for vm.sh
 	chown -R root:vm "$vmdir"
 	find "$vmdir" -type d -execdir chmod 770 {} + || chmod -R 770 "$vmdir"
