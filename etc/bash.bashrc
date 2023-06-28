@@ -21,6 +21,8 @@ alias ip="ip -c"
 alias copy="xclip -selection clipboard"
 alias paste="xclip -o -selection clipboard"
 
+#set -o vi
+
 # Combine history across TTYs
 #PROMPT_COMMAND="history -a; history -c; history -r"
 HISTCONTROL=ignoredups:erasedups
