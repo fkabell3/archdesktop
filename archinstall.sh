@@ -482,7 +482,8 @@ elif [ X"$1" = X"chroot" ]; then
 		yay --save --sudo doas
 	setpriv --reuid=bin --regid=bin --clear-groups --reset-env \
 		yay --removemake --noconfirm -S \
-		devour $librewolf otf-san-francisco-mono doas-sudo-shim xbanish
+		devour $librewolf otf-san-francisco-mono \
+		doas-sudo-shim keynav xbanish
 
 	for srcdir in dwm dmenu st tabbed slock sfeed herbe; do
 		cd "$builddir/$srcdir"

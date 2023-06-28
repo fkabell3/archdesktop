@@ -26,6 +26,9 @@ export BROWSER
 # Potentially a security risk, but network is disallowed access to X anyways
 xhost +local:
 
+# Enable keyboard based cursor navigation
+keynav &
+
 # Enable translucency
 picom --blur-method box &
 
