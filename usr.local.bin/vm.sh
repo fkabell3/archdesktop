@@ -1,6 +1,7 @@
 #!/bin/sh
 
 user=vm
+gid="$(id -g "$user")"
 dir="$(getent passwd "$user" | awk -F : '{ print $6 }')"
 
 # Resources allocated to guest
@@ -23,9 +24,7 @@ iface="$(awk '$2 == 00000000 { print $7, $1 }' /proc/net/route | sort | \
 
 usage() {
 	printf "%s" "Syntax error: Usage: $(basename "$0") "
-	if [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -eq 1 ]; then
-		printf "%s" "<subdirectory>"
-	elif [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -eq 2 ]; then
+	if [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -eq 2 ]; then
 		printf "%s" "$(basename $dir/*)"
 	elif [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -ge 3 ]; then
 		printf "%s" "{"
@@ -38,7 +37,15 @@ usage() {
 }
 
 privdrop() {
-	runuser -u "$user" -- "$@"
+	if [ X"$1" = X"qemu" ]; then
+		# QEMU needs to escalate privs for bridge helper
+		# to create tun device and needs to keep $DISPLAY
+		shift
+		setpriv --reuid="$user" --regid="$gid" --clear-groups "$@"
+	else
+		setpriv --reuid="$user" --regid="$gid" --clear-groups \
+			--reset-env --no-new-privs "$@"
+	fi
 }
 
 ckperm() {
@@ -206,7 +213,7 @@ else
 	iptables -t nat -A POSTROUTING -o "$iface" -j MASQUERADE
 fi
 
-privdrop devour qemu-system-x86_64 \
+privdrop qemu devour qemu-system-x86_64 \
 	-enable-kvm \
 	-display gtk \
 	-m "$mebis" \

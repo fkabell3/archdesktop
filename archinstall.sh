@@ -434,8 +434,8 @@ elif [ X"$1" = X"chroot" ]; then
 	cat <<- EOF > /root/.bashrc
 	# /root/.bashrc
 	
-	alias makepkg="runuser -u bin -- makepkg"
-	alias yay="runuser -u bin -- yay"
+	alias yay="setpriv --reuid=bin --regid=bin --clear-groups --reset-env yay"
+	alias makepkg="setpriv --reuid=bin --regid=bin --clear-groups makepkg"
 	EOF
 
 	# Build stuff as bin user, see /etc/doas.conf
@@ -471,14 +471,18 @@ elif [ X"$1" = X"chroot" ]; then
 	# Create temp sudo link to prevent asking for root password
 	# since doas-sudo-shim has not been installed yet
 	ln -s /usr/bin/doas /usr/local/bin/sudo
-	cd "$builddir"/yay-bin && runuser -u bin -- makepkg --noconfirm -ci
+	cd "$builddir"/yay-bin && setpriv --reuid=bin --regid=bin --clear-groups \
+		makepkg --noconfirm -ci
 	rm /usr/local/bin/sudo
 	# doas.conf only works when full pacman path is set with yay --save
 	# also doas.conf must have full pacman path or else permission denied
-	runuser -u bin -- yay --save --pacman /usr/bin/pacman
-	runuser -u bin -- yay --save --sudo doas
-	runuser -u bin -- yay --removemake --noconfirm -S devour $librewolf \
-		otf-san-francisco-mono doas-sudo-shim xbanish
+	setpriv --reuid=bin --regid=bin --clear-groups --reset-env \
+		yay --save --pacman /usr/bin/pacman
+	setpriv --reuid=bin --regid=bin --clear-groups --reset-env \
+		yay --save --sudo doas
+	setpriv --reuid=bin --regid=bin --clear-groups --reset-env \
+		yay --removemake --noconfirm -S \
+		devour $librewolf otf-san-francisco-mono doas-sudo-shim xbanish
 
 	for srcdir in dwm dmenu st tabbed slock sfeed herbe; do
 		cd "$builddir/$srcdir"
