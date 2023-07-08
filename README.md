@@ -2,38 +2,50 @@
 
 Arch Linux installation script with many suckless.org utilities. This setup tries to utilize simple tools and scripts in lieu of more complicated alternatives. For instance,<br>
 
-* RSS/YouTube subscriptions are handled with sfeedrc
-* Password management is dealt with files, directories, and xclip
-* Quick screenshotting, and network/sound configuration
-* Terminal emulation has the ability to open files and links easily
-* Virtual machines can be spawned trivally with a few keystrokes
+* Password management is dealt with files, directories, and xclip.
+* YouTube subscriptions are handled with sfeedrc.
+* Quick screenshotting, and network/sound/brightness configuration.
+* Terminal emulation has the ability to open files and links easily.
+* Spawn virtual machines trivally with a few keystrokes.
 
-All of the above actions utilize dmenu for a consistent UI. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme has been applied to get that nice look often seen in Apple software.<br>
+All of the above actions utilize `dmenu` for a consistent UI on Xorg. Lack of mouse use is a goal, but mouse support has been patched in. A transparency theme has been applied to get that nice look often seen in Apple software, but without the proprietary garbage. HiDPI is supported.<br>
 
 <img width="1000" src="https://github.com/fkabell3/archdesktop/blob/main/archdesktop.png">
 
 Non-GUI features include:<br>
-* doas instead of sudo (with shim installed), `/bin/sh -> dash`
-* Transparent priviledge dropping when running `makepkg` or `yay` as root
-* Force a good choice of DNS nameservers (1.1.1.1/9.9.9.9); ignore DHCP DNS
+* Mostly transparent priviledge dropping when running `makepkg` or `yay` as root.
+* `doas` instead of `sudo` (with shim installed), `/bin/sh -> dash`.
+* Force a good choice of DNS nameservers (1.1.1.1/9.9.9.9); ignore DHCP DNS.
+* If using EFI, installs an EFI shell to the root of the ESP.
+* Limine bootloader or EFI boot stub with bootsplash.
+* `dracut` instead of `mkinitcpio` (seems to work fine but probably needs more testing).
+
+Install features:<br>
+* Straightforward installation questions, also easily configurable by editing variables at begining of script
+* Edit partition/swap with vim. The script automates the rest. Only ext4 fs is supported.
+* BIOS/EFI are both supported. EFI has a choice between PMBR/GPT. GPT has a choice between bootloader and EFI boot stub.
+* Script can (and does in the 2nd half) run with dash(1).
+* Script is capable of chrooting itself.
+* If user data is valid, then script is `set -e` compliant. The script may exit on any failures which result from bad user input.
 
 Installation Instructions:
 * [Download](https://archlinux.org/download/), burn, and boot into an Arch Linux installation enviroment.
-* Connect to network<br>
+* Connect to network.<br>
 Either plug in an Ethernet cable or for WiFi try:<br>
-`iwctl station <iface> connect '<SSID>'`
-* Download git<br>
-`pacman --noconfirm -Sy git`<br>
-If that fails, try:<br>
-`pkill gpg-agent; rm -rf /etc/pacman.d/gnupg/* && pacman-key --init && pacman-key --populate && pacman --noconfirm -Sy git`
-* `export gitdir="$PWD"/archdesktop`
-* `git -C "$(dirname "$gitdir")" clone --depth 1 https://github.com/fkabell3/archdesktop`
-* `"$gitdir"/archinstall.sh nochroot`<br>
+`iwctl -P '<PSK>' station <iface> connect '<SSID>'`
+* `curl https://raw.githubusercontent.com/fkabell3/archdesktop/main/archinstall.sh | sh`<br>
 Note: you can also edit variables directly inside the script to avoid interactive querying.
-* When the first part of the script is done, hit enter to chroot and call it again with $1 as chroot<br>
-`/archinstall.sh chroot`
-* When script is done, exit and reboot into the GUI.
-* (Optional) Place a background in /usr/local/share/backgrounds.<br>
-If there is only one background it is chosen by default. If there is more than one edit /etc/X11/xdm/Xsetup_0 to specify which one you want.
+* When script is done, exit and reboot into the GUI.<br>
+If script fails for any reason, reboot before trying again.<br>
+If using EFI, read EFIhelp.md to get bootloader/EFI stub working in the case that efibootmgr(8) fails due to poor EFI implementations. If your reboot fails, then this is probably the best first troubleshooting step.<br>
 
-Your feedback is appreciated.
+Optional Postinstallation Instructions:<br>
+(Spawn terminals with Super+Enter, spawn application launcher with Super+P. Read dwm(1).)
+* Place a background in /usr/local/share/backgrounds/.<br>
+If there is only one background it is chosen by default. If there is more than one edit /etc/X11/xdm/Xsetup_0 to specify which one you want.<br>
+* Populate /var/vm/ with subdirectories which contain a file called disk (dd if=/dev/zero of=/var/vm/<name>/disk) and an .iso file. Then start a virtual machine.<br>
+* Enable the installed LibreWolf (Firefox fork) browser addons by starting a browser and clicking the handburger menu on the top right.<br>
+* Place passwords in $HOME/.passwords
+
+Please inform me if the scipt fails on your system (after EFIhelp.md).
+Your feedback is appreciated. 
