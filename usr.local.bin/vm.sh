@@ -24,9 +24,9 @@ iface="$(awk '$2 == 00000000 { print $7, $1 }' /proc/net/route | sort | \
 
 usage() {
 	printf "%s" "Syntax error: Usage: $(basename "$0") "
-	if [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -eq 2 ]; then
+	if [ "$(find "$dir" -type d 2> /dev/null | wc -l)" -eq 2 ]; then
 		printf "%s" "$(basename $dir/*)"
-	elif [ "$(find "$dir" -type d 2>/dev/null | wc -l)" -ge 3 ]; then
+	elif [ "$(find "$dir" -type d 2> /dev/null | wc -l)" -ge 3 ]; then
 		printf "%s" "{"
 		for vmdir in "$dir"/*; do
 			[ -d "$vmdir" ] && printf "%s" "$(basename "$vmdir") | "
@@ -199,12 +199,12 @@ ip addr add 10.0.0.1/30 dev virbr0
 ip -6 addr add fe80::1/64 dev virbr0
 ip link set virbr0 up
 if [ X"$(sysctl net.ipv4.ip_forward)" = X"net.ipv4.ip_forward = 0" ]; then
-	sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
+	sysctl net.ipv4.ip_forward=1 > /dev/null 2>&1
 	routing4=wasoff
 fi
 if [ X"$(sysctl net.ipv6.conf.all.forwarding)" = \
 	X"net.ipv6.conf.all.forwarding = 0" ]; then
-	sysctl net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
+	sysctl net.ipv6.conf.all.forwarding=1 > /dev/null 2>&1
 	routing6=wasoff
 fi
 if [ -z "$iface" ]; then
@@ -236,9 +236,9 @@ log informational "Undoing network config changes"
 # Re-enable VPN here
 ip link set virbr0 down
 brctl delbr virbr0
-[ X"$routing4" = X"wasoff" ] && sysctl net.ipv4.ip_forward=0 >/dev/null 2>&1
+[ X"$routing4" = X"wasoff" ] && sysctl net.ipv4.ip_forward=0 > /dev/null 2>&1
 [ X"$routing6" = X"wasoff" ] && sysctl net.ipv6.conf.all.forwarding=0 \
-	>/dev/null 2>&1
+	> /dev/null 2>&1
 
 case "$status" in
 	0) exit "$status";;

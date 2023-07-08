@@ -10,14 +10,20 @@ while true; do
 		vpn=''
 	fi
 	if [ -n "$batterypath" ]; then
-		case $(cat $batterypath/status) in
-			Charging) charge="+ ";;
-			Discharging) charge="- ";;
-			*) charge=" ";;
+		case "$(cat "$batterypath"/status)" in
+			Charging)
+				charge='+ '
+			;;
+			Discharging)
+				charge='- '
+			;;
+			*)
+				charge=' '
+			;;
 		esac
 		battery="$(cat $batterypath/capacity)%"
 	fi
-	date=$(date +'%a %R')
+	date=$(date '+%a %R')
 	xsetroot -name "$vpn$battery$charge$date"
 	sleep 1
 done

@@ -1,19 +1,31 @@
 #!/bin/sh
 
 while true; do
-	action="$(printf "%s\n" \
-		"Suspend" \
-		"Logout" \
-		"Reboot" \
-		"Shutdown" | \
+	action="$(printf '%s\n' \
+		'Suspend' \
+		'Hibernate' \
+		'Logout' \
+		'Reboot' \
+		'Shutdown' | \
 		dmenu -i -l "$DMENULINENUM")"
 
 	[ -z "$action" ] && exit 1
 	
 	case "$action" in
-		"Suspend") exec systemctl suspend;;
-		"Logout") exec pkill -u "$(whoami)";;
-		"Reboot") exec shutdown -r now;;
-		"Shutdown") exec shutdown -P now;;
+		Suspend)
+			exec systemctl suspend
+		;;
+		Hibernate)
+			exec systemctl hibernate
+		;;
+		Logout)
+			exec pkill -u "$(whoami)"
+		;;
+		Reboot)
+			exec shutdown -r now
+		;;
+		Shutdown)
+			exec shutdown -P now
+		;;
 	esac 
 done
