@@ -43,7 +43,7 @@ Optional Postinstallation Instructions:<br>
 (Spawn terminals with Super+Enter, spawn application launcher with Super+P. Read dwm(1).)
 * Place a background in /usr/local/share/backgrounds/.<br>
 If there is only one background, it is chosen by default. If there is more than one, edit /etc/X11/xdm/Xsetup_0 to specify which one you want.<br>
-* Populate /var/vm/ with subdirectories which contain a file called disk (`dd if=/dev/zero of=/var/vm/\<name\>/disk`) and an .iso file. Then start a virtual machine.<br>
+* Populate /var/vm/ with subdirectories which contain a file called disk (`dd if=/dev/zero of=/var/vm/<name>/disk`) and an .iso file. Then start a virtual machine.<br>
 * Enable the installed LibreWolf (Firefox fork) browser addons by starting a browser and clicking the handburger menu on the top right.<br>
 * Place passwords in $HOME/.passwords
 
