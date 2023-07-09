@@ -280,6 +280,7 @@ if [ -z "$1" ]; then
 		git clone --depth 1 \
 			https://github.com/fkabell3/archdesktop || \
 			die "git clone failed."
+		gitdir="$PWD"/archdesktop
 	fi
 	clear
 
