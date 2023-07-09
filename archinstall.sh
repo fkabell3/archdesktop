@@ -270,8 +270,8 @@ if [ -z "$1" ]; then
 			pacman-key --populate
 			pacman --noconfirm -Sy git
 		fi
-		clear
 	fi
+	clear
 
 	if [ X"$(basename "$PWD")" = X'archdesktop' ]; then
 		gitdir="$PWD"
@@ -696,6 +696,7 @@ elif [ X"$1" = X'chroot' ]; then
 	# I think `uname -r' is unreliable, displays nonchroot kernel instead
 	kver="$(find /usr/lib/modules/*/vmlinuz | cut -d / -f 5 | sort -u | tail -n 1)"
 	cp /usr/lib/modules/"$kver"/vmlinuz /boot/linux
+	printf '%s\n' 'compress="cat"' > /etc/dracut.conf
 	[ X"$bootmode" = X'efi' ] && mkdir -p /boot/efi/EFI/Linux/
 	if [ X"$bootloader" = X'limine' ]; then
 		if [ X"$bootmode" = X'bios' ]; then
@@ -719,7 +720,7 @@ elif [ X"$1" = X'chroot' ]; then
 		fallback='/boot/fallback.img'
 	elif [ X"$bootloader" = X'efistub' ]; then
 		printf '%s\n' "kernel_cmdline=\"$kernelcmdline\"" \
-			'compress="cat"' > /etc/dracut.conf
+			> /etc/dracut.conf
 		printf '%s\n' 'uefi="yes"' \
 			'uefi_splash_image="/usr/share/systemd/bootctl/linux.bmp"' \
 			>> /etc/dracut.conf
