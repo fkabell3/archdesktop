@@ -1,7 +1,7 @@
 diff -ruN a/config.def.h b/config.def.h
---- a/config.def.h	2023-06-05 22:19:18.189621763 -0500
-+++ b/config.def.h	2023-06-05 22:19:23.772954960 -0500
-@@ -2,20 +2,29 @@
+--- a/config.def.h	2023-07-07 18:54:39.141171927 -0500
++++ b/config.def.h	2023-07-07 18:54:24.227837918 -0500
+@@ -2,7 +2,9 @@
  
  /* appearance */
  static const unsigned int borderpx  = 1;        /* border pixel of windows */
@@ -10,11 +10,8 @@ diff -ruN a/config.def.h b/config.def.h
 +static const int swallowfloating    = 1;        /* 1 means swallow floating windows by default */
  static const int showbar            = 1;        /* 0 means no bar */
  static const int topbar             = 1;        /* 0 means bottom bar */
--static const char *fonts[]          = { "monospace:size=10" };
--static const char dmenufont[]       = "monospace:size=10";
-+static const char *fonts[]          = { "SF Mono:size=25" };
-+static const char dmenufont[]       = "SF Mono:size=25";
- static const char col_gray1[]       = "#222222";
+ static const char *fonts[]          = { "monospace:size=10" };
+@@ -11,11 +13,18 @@
  static const char col_gray2[]       = "#444444";
  static const char col_gray3[]       = "#bbbbbb";
  static const char col_gray4[]       = "#eeeeee";
@@ -92,8 +89,8 @@ diff -ruN a/config.def.h b/config.def.h
  	TAGKEYS(                        XK_2,                      1)
  	TAGKEYS(                        XK_3,                      2)
 diff -ruN a/config.mk b/config.mk
---- a/config.mk	2023-06-05 22:19:18.189621763 -0500
-+++ b/config.mk	2023-06-05 22:19:23.772954960 -0500
+--- a/config.mk	2023-07-07 18:54:39.141171927 -0500
++++ b/config.mk	2023-07-07 18:54:24.227837918 -0500
 @@ -20,10 +20,11 @@
  # OpenBSD (uncomment)
  #FREETYPEINC = ${X11INC}/freetype2
@@ -108,8 +105,8 @@ diff -ruN a/config.mk b/config.mk
  # flags
  CPPFLAGS = -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700L -DVERSION=\"${VERSION}\" ${XINERAMAFLAGS}
 diff -ruN a/drw.c b/drw.c
---- a/drw.c	2023-06-05 22:19:18.189621763 -0500
-+++ b/drw.c	2023-06-05 22:19:23.772954960 -0500
+--- a/drw.c	2023-07-07 18:54:39.141171927 -0500
++++ b/drw.c	2023-07-07 18:54:24.227837918 -0500
 @@ -61,7 +61,7 @@
  }
  
@@ -190,8 +187,8 @@ diff -ruN a/drw.c b/drw.c
  		w -= lpad;
  	}
 diff -ruN a/drw.h b/drw.h
---- a/drw.h	2023-06-05 22:19:18.189621763 -0500
-+++ b/drw.h	2023-06-05 22:19:23.772954960 -0500
+--- a/drw.h	2023-07-07 18:54:39.141171927 -0500
++++ b/drw.h	2023-07-07 18:54:24.227837918 -0500
 @@ -20,6 +20,9 @@
  	Display *dpy;
  	int screen;
@@ -223,8 +220,8 @@ diff -ruN a/drw.h b/drw.h
  /* Cursor abstraction */
  Cur *drw_cur_create(Drw *drw, int shape);
 diff -ruN a/dwm.1 b/dwm.1
---- a/dwm.1	2023-06-05 22:19:18.189621763 -0500
-+++ b/dwm.1	2023-06-05 22:19:23.772954960 -0500
+--- a/dwm.1	2023-07-07 18:54:39.141171927 -0500
++++ b/dwm.1	2023-07-07 18:54:24.227837918 -0500
 @@ -116,6 +116,9 @@
  .B Mod1\-Shift\-c
  Close focused window.
@@ -236,8 +233,8 @@ diff -ruN a/dwm.1 b/dwm.1
  Toggle focused window between tiled and floating state.
  .TP
 diff -ruN a/dwm.c b/dwm.c
---- a/dwm.c	2023-06-05 22:19:18.189621763 -0500
-+++ b/dwm.c	2023-06-05 22:19:23.772954960 -0500
+--- a/dwm.c	2023-07-07 18:54:39.141171927 -0500
++++ b/dwm.c	2023-07-07 18:54:24.227837918 -0500
 @@ -40,6 +40,12 @@
  #include <X11/extensions/Xinerama.h>
  #endif /* XINERAMA */

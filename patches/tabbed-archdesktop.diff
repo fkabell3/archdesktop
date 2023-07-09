@@ -1,12 +1,9 @@
 diff -ruN a/config.def.h b/config.def.h
---- a/config.def.h	2023-06-06 00:28:13.056102088 -0500
-+++ b/config.def.h	2023-06-06 00:27:56.392769166 -0500
-@@ -1,12 +1,12 @@
- /* See LICENSE file for copyright and license details. */
- 
+--- a/config.def.h	2023-07-07 21:24:49.300140628 -0500
++++ b/config.def.h	2023-07-07 21:24:31.500139830 -0500
+@@ -3,10 +3,10 @@
  /* appearance */
--static const char font[]        = "monospace:size=9";
-+static const char font[]        = "SF Mono:size=20";
+ static const char font[]        = "monospace:size=9";
  static const char* normbgcolor  = "#222222";
 -static const char* normfgcolor  = "#cccccc";
 +static const char* normfgcolor  = "#bbbbbb";
@@ -19,8 +16,8 @@ diff -ruN a/config.def.h b/config.def.h
  static const char before[]      = "<";
  static const char after[]       = ">";
 diff -ruN a/tabbed.c b/tabbed.c
---- a/tabbed.c	2023-06-06 00:28:13.056102088 -0500
-+++ b/tabbed.c	2023-06-06 00:27:56.392769166 -0500
+--- a/tabbed.c	2023-07-07 21:24:49.300140628 -0500
++++ b/tabbed.c	2023-07-07 21:24:31.500139830 -0500
 @@ -152,7 +152,7 @@
  	[MapRequest] = maprequest,
  	[PropertyNotify] = propertynotify,
