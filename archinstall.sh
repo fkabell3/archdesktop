@@ -271,7 +271,6 @@ if [ -z "$1" ]; then
 			pacman --noconfirm -Sy git
 		fi
 	fi
-	clear
 
 	if [ X"$(basename "$PWD")" = X'archdesktop' ]; then
 		gitdir="$PWD"
@@ -282,6 +281,7 @@ if [ -z "$1" ]; then
 			https://github.com/fkabell3/archdesktop || \
 			die "git clone failed."
 	fi
+	clear
 
 	printf '%s\n%s\n\n' 'Note: variables do not get error checked.' \
 		'set -e is enabled so script will just exit on any failures.'
