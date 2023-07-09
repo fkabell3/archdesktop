@@ -36,16 +36,16 @@ Either plug in an Ethernet cable or for WiFi try:<br>
 * `curl https://raw.githubusercontent.com/fkabell3/archdesktop/main/archinstall.sh | sh`<br>
 Note: you can also edit variables directly inside the script to avoid interactive querying.
 * When script is done, exit and reboot into the GUI.<br>
-If script fails for any reason, reboot before trying again.<br>
+**If script fails for any reason, reboot before trying again.**<br>
 If using EFI, read TROUBLESHOOTING.md to get bootloader/EFI stub working in the case that efibootmgr(8) fails due to poor EFI implementations. If your reboot fails, then this is probably the best first troubleshooting step.<br>
 
 Optional Postinstallation Instructions:<br>
-(Spawn terminals with Super+Enter, spawn application launcher with Super+P. Read dwm(1).)
+(Spawn terminals with Super/Enter, spawn application launcher with Super/P. Read dwm(1).)
 * Place a background in /usr/local/share/backgrounds/.<br>
 If there is only one background, it is chosen by default. If there is more than one, edit /etc/X11/xdm/Xsetup_0 to specify which one you want.<br>
 * Populate /var/vm/ with subdirectories which contain a file called disk (`dd if=/dev/zero of=/var/vm/<name>/disk`) and an .iso file. Then start a virtual machine.<br>
 * Enable the installed LibreWolf (Firefox fork) browser addons by starting a browser and clicking the handburger menu on the top right.<br>
-* Place passwords in $HOME/.passwords
+* Place passwords in `$HOME/.passwords`
 
 Please inform me if the scipt fails on your system (after TROUBLESHOOTING.md).<br>
 Your feedback is appreciated. 
