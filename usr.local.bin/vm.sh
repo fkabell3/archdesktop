@@ -215,7 +215,7 @@ fi
 
 privdrop qemu devour qemu-system-x86_64 \
 	-enable-kvm \
-	-display gtk \
+	-display gtk,zoom-to-fit=on \
 	-m "$mebis" \
 	-smp "$vcpu" \
 	-nic bridge,br=virbr0 \
