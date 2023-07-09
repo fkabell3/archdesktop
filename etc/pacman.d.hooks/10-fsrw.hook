@@ -1,0 +1,9 @@
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = *
+
+[Action]
+Description = Temporarily mounting filesystems rw...
+When = PreTransaction
+Exec = /bin/sh -c "awk '$4 ~ /ro/ { print $1 }' /etc/fstab | xargs -I{} mount -o remount,rw {}"
