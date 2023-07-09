@@ -33,8 +33,11 @@ Installation Instructions:
 * Connect to network.<br>
 Either plug in an Ethernet cable or for WiFi try:<br>
 `iwctl -P '<PSK>' station <iface> connect '<SSID>'`
-* `curl https://raw.githubusercontent.com/fkabell3/archdesktop/main/archinstall.sh | sh`<br>
-Note: you can also edit variables directly inside the script to avoid interactive querying.
+* `curl https://raw.githubusercontent.com/fkabell3/archdesktop/main/archinstall.sh > archinstall.sh`<br>
+You can not pipe | curl directly into sh. You must save it as a file and then run it.
+* `vim archinstall.sh`<br>
+(Optional) Edit variables directly inside the script to avoid interactive querying.
+* `sh archinstall.sh`
 * When script is done, exit and reboot into the GUI.<br>
 **If script fails for any reason, reboot before trying again.**<br>
 If using EFI, read TROUBLESHOOTING.md to get bootloader/EFI stub working in the case that efibootmgr(8) fails due to poor EFI implementations. If your reboot fails, then this is probably the best first troubleshooting step.<br>
