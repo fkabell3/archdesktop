@@ -106,7 +106,6 @@ autosize() {
 		;;
 		free)
 			base="$free"
-			min=0
 			max="$storage"
 		;;
 	esac
@@ -235,7 +234,8 @@ automkfs() {
 	partnum=$((partnum + 1))
 }
 
-# sed -i is nonportable
+# sed -i is not defined by POSIX
+# this is not a fully functional replacement
 sed_i() {
 	file="$(eval printf '%s' \$"$#")"
 	set -- \
@@ -298,17 +298,17 @@ if [ -z "$1" ]; then
 				'C) GPT  & EFI stub with unified kernel image and bootsplash'
 		userquery eficonf
 		case "$eficonf" in
+			[Aa]*)
+				disklabel=mbr # PMBR
+				bootloader=limine
+			;;
 			[Bb]*)
 				disklabel=gpt
 				bootloader=limine
 			;;
-			[Cc]*)
+			*)
 				disklabel=gpt
 				bootloader=efistub
-			;;
-			*)
-				disklabel=mbr # PMBR
-				bootloader=limine
 			;;
 		esac
 	fi
@@ -358,6 +358,19 @@ if [ -z "$1" ]; then
 
 		true > /tmp/disk.rej > /tmp/disk.swap
 
+	[ X"$bootmode" = X'efi' ] && string=' ESP,'
+	cat <<- EOF > /tmp/notice
+		1i \\
+		# Limitations: \\
+		# Do not change the labels of or delete rootfs, boot,$string or swap \\
+		# /usr(/local)/bin directories must be executable with SUID\\
+		# Only the ext4/vfat filesystems are supported \\
+		# \\
+		# Notes: \\
+		# /var/vm holds virtual machines, /var/builds holds yay/makepkg/git builds \\
+		# pacman-hooks(5) remount all filesystems rw, then back to ro, according to fstab \\
+		#
+	EOF
 	_break=0
 	regex='^[a-zA-Z]* *[0-9]* *[/a-z]* *\(ext4\|vfat\|swap\) *[a-z,]* *[0-1] *[0-2]'
 	while true; do
@@ -367,31 +380,34 @@ if [ -z "$1" ]; then
 			'# <label>,<size>,<mount>,<fs>,<options>,<dump>,<pass>' \
 			< /tmp/disk >> /tmp/disk.swap
 		free="$storage"
-		for number in $(awk '{print $2}' /tmp/disk); do
+		for number in $(awk '{ print $2 }' /tmp/disk); do
 			free=$((free - number))
 		done
 		printf '%s\n' "# Free: $free" >> /tmp/disk.swap
 		cp /tmp/disk.swap /tmp/disk.bak
 		clear
 		cat /tmp/disk.swap
-		[ "$free" -lt 0 ] && printf '\n%s\n%s\n' \
-			'WARNING: MORE STORAGE ALLOCATED THAN AVAILABLE' \
-			'THIS WILL BREAK SCRIPT'
+		# Fix me, $swapsize should always be >= 1
+		[ "$(awk '/^swap/ { print $2 }' /tmp/disk.swap)" -eq 0 ] && printf '\n%s\n' \
+				'Bug: allocate at least 1 gibibyte to swap! Sorry!'
+		[ "$free" -lt 0 ] && printf '\n%s\n' \
+			'Warning: more storage allocated than available, this will break script!'
 		if [ -s /tmp/disk.rej ]; then
-			printf '\n%s\n%s\n' 'WARNING: THE REGULAR EXPRESSION:' \
+			printf '\n%s\n%s\n' 'Warning: the regular expression:' \
 				"$regex"
-			printf '%s' 'DID NOT MATCH LINE'
-			[ "$(wc -l < /tmp/disk.rej)" -gt 1 ] && printf '%s' 'S'
+			printf '%s' 'did not match line'
+			[ "$(wc -l < /tmp/disk.rej)" -gt 1 ] && printf '%s' 's'
 			printf '%s\n' ':'
 			cat /tmp/disk.rej
 		fi
-		printf '\n%s' 'Are these values ok? [yes/vim] '
+		printf '\n%s' 'Are these values ok? [y/N] '
 		read REPLY
 		case "$REPLY" in
 			[Yy]*)
 				_break=1
 			;;
-			[Vv]*)
+			*)
+				sed_i "$(cat /tmp/notice)" /tmp/disk.swap
 				cat /tmp/disk.swap > /tmp/disk.edit
 				if [ -s /tmp/disk.rej ]; then
 					printf '\n%s\n' '# Rejects:' \
@@ -406,19 +422,19 @@ if [ -z "$1" ]; then
 			;;
 		esac
 		grep -o "$regex" /tmp/disk.swap > /tmp/disk
-		grep -v "^$\|^#\|$regex" /tmp/disk.swap > /tmp/disk.rej || true
+		grep -v "\(^$\|^#\|$regex\)" /tmp/disk.swap > /tmp/disk.rej || true
 		[ "$_break" -eq 1 ] && break
 	done
 
 	printf '%s\n' \
-		'Press ENTER to wipe partition table and install Linux,' \
-		'CTRL/C to abort.'
+		'From this point on, if the script fails (eg. curl(1) hangs), reboot before trying again.' \
+		'Press ENTER to wipe partition table and install Linux, CTRL/C to abort.'
 	read REPLY
 
 	sectorsize="$(cat /sys/block/"$disk"/queue/hw_sector_size)"
 	sectorspergibi=$((1073741824 / sectorsize))
 
-	sfdisk --delete /dev/"$disk"
+	sfdisk --delete /dev/"$disk" || true
 	partnum=1
 	while read line; do
 		eval "autodisk $line"
@@ -513,9 +529,11 @@ if [ -z "$1" ]; then
 		> /mnt/etc/fstab
 
 	# cp /tmp/disk /mnt/tmp/disk doesn't work. No idea why.
-	bootpart="$(awk '$1 ~ /ESP/ { print NR }' /tmp/disk)"
-	if [ X"$disklabel" = X'mbr' ] && [ "$bootpart" -ge 4 ]; then
-		bootpart=$((partnum + 1))
+	if [ X"$disklabel" = X'mbr' ]; then
+		bootpart="$(awk '$1 ~ /ESP/ { print NR }' /tmp/disk)"
+		if [ "$bootpart" -ge 4 ]; then
+			bootpart=$((bootpart + 1))
+		fi
 	fi
 
 	horizontal="$(cut -d , -f 1 "$(find /sys -name virtual_size 2> /dev/null | \
