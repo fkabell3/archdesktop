@@ -51,18 +51,24 @@ privdrop() {
 ckperm() {
 	file="$1"
 	case "$file" in
-		""|*iso) write=0
+		""|*iso)
+			write=0
 			existseverity=warning
 			permseverity=warning
-			status=252;;
-		*disk) write=1
+			status=252
+		;;
+		*disk)
+			write=1
 			existseverity=fatal
 			permseverity=fatal
-			status=253;;
-		*disk2) write=1
-			existseverity=informational
+			status=253
+		;;
+		*disk2)
+			write=1
+			existseverity=info
 			permseverity=warning
-			status=254;;
+			status=254
+		;;
 	esac
 	if [ -f "$file" ]; then
 		if [ "$write" -eq 1 ]; then
@@ -96,7 +102,7 @@ ckperm() {
 			fi
 		fi
 	else
-		[ X"$existseverity" = X"informational" ] || \
+		[ X"$existseverity" = X"info" ] || \
 			if [ -z "$file" ]; then
 				log "$existseverity" "No .iso file exist."
 			else
@@ -117,11 +123,15 @@ lsperm() {
 
 log() {
 	case "$1" in
-		informational) printf "%s\n" "$2";;
-		warning) printf "%s" "Warning: "
-			printf "%s\n" "$2" >&2;;
-		fatal) printf "%s" "Fatal: "
-			printf "%s\n" "$2" >&2;;
+		info)
+			printf "%s\n" "$2"
+		;;
+		warning)
+			printf "%s %s\n" "Warning:" "$2" >&2
+		;;
+		fatal)
+			printf "%s %s\n" "Fatal:" "$2" >&2
+		;;
 	esac
 }
 
@@ -189,9 +199,9 @@ else
 	iso=
 fi
 
-log informational "Initializing $1 virtual machine..."
+log info "Initializing $1 virtual machine..."
 
-log informational "Configuring network"
+log info "Configuring network"
 # Disable VPN here
 brctl addbr virbr0
 ip addr flush dev virbr0
@@ -221,18 +231,24 @@ privdrop qemu devour qemu-system-x86_64 \
 	-nic bridge,br=virbr0 \
 	-drive file="$disk",format=raw \
 	"$_drive" "$disk2" \
-	"$_cdrom" "$iso" 
+	"$_cdrom" "$iso" \
+	> /dev/null 2>&1
 
 status="$?"
 
 case "$status" in
-	# This condition (0) does not guarantee success
-	0) log informational "Virtual machine shutdown!";;
-	139) log fatal "Virtual Machine GUI failed!";;
-	*) log fatal "Virtual machine failed!";;
+	0) # This condition does not guarantee success
+		log info "Virtual machine shutdown!"
+	;;
+	139)
+		log fatal "Virtual Machine GUI failed!"
+	;;
+	*)
+		log fatal "Virtual machine failed!"
+	;;
 esac
 
-log informational "Undoing network config changes"
+log info "Undoing network config changes"
 # Re-enable VPN here
 ip link set virbr0 down
 brctl delbr virbr0
@@ -240,13 +256,13 @@ brctl delbr virbr0
 [ X"$routing6" = X"wasoff" ] && sysctl net.ipv6.conf.all.forwarding=0 \
 	> /dev/null 2>&1
 
-case "$status" in
-	0) exit "$status";;
-	139) if [ -z "$DISPLAY" ]; then
-			log informational "\$DISPLAY is not set."
-		else
-			log informational "Likely either \$DISPLAY is incorrectly set or"
-			log informational "root is denied by X access control (xhost(1))."
-		fi;;
-esac
+if [ "$status" -eq 139 ]; then
+	if [ -z "$DISPLAY" ]; then
+		log info "\$DISPLAY is not set."
+	else
+		log info "Likely either \$DISPLAY is incorrectly set or"
+		log info "root is denied by X access control (xhost(1))."
+	fi
+fi
+
 delayexit "$status"
