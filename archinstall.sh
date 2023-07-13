@@ -1,10 +1,6 @@
 #!/bin/sh
 set -e
 
-# Ignore if downloaded with curl(1)
-_gitdir='Input directory where this repo was cloned into: '
-#gitdir=
-
 _disk='Input target disk to install Linux: '
 #disk=
 
@@ -14,6 +10,10 @@ _disk='Input target disk to install Linux: '
 # C) GPT  & EFI stub with unified kernel image with bootsplash
 _eficonf='Your choice [a/b/C]: '
 #eficonf=
+
+_uselvm='Would you like to use LVM? [Y/n]: '
+#uselvm=
+vgname='vg'
 
 _timezone='Input timezone (as in /usr/share/zoneinfo/): '
 #timezone=
@@ -34,7 +34,7 @@ _userpass='Input user password: '
 #userpass=
 
 # Every variable we need inside the chroot
-chrootvars='disk disklabel bootloader bootpart timezone hostname rootpass user
+chrootvars='disk diskp disklabel bootloader timezone hostname rootpass user
 usergecos userpass pixels perpx fontsize'
 
 # Arbitrary additional user packages
@@ -93,10 +93,15 @@ userquery() {
 	done
 }
 
-chrootvars() {
-	for var in $chrootvars; do
-		printf '%s ' "$var=\"$(eval printf '%s' "\"\$$var\"")\""
-	done
+gitinstall() {
+	pacman --noconfirm -Sy git || var="$?"
+	if [ "$var" -ne 0 ]; then
+		pkill gpg-agent || true
+		rm -rf /etc/pacman.d/gnupg/*
+		pacman-key --init
+		pacman-key --populate
+		pacman --noconfirm -Sy git
+	fi
 }
 
 autosize() {
@@ -136,7 +141,7 @@ autosize() {
 	free=$((free - gibi))
 }
 
-autodisk() {
+autopart() {
 	if [ X"$disklabel" = X'gpt' ]; then
 		case "$3" in
 			none|swap) # Linux swap
@@ -197,8 +202,11 @@ autodisk() {
 }
 
 automkfs() {
-	if [ X"$disklabel" = X'mbr' ] && [ "$partnum" -eq 4 ]; then
-		partnum=$((partnum + 1))
+	if [ "$onlvm" -eq 0 ]; then
+			if [ X"$disklabel" = X'mbr' ] && [ "$partnum" -eq 4 ]
+			then
+				partnum=$((partnum + 1))
+			fi
 	fi
 	case "$4" in
 		vfat)
@@ -211,17 +219,11 @@ automkfs() {
 			mkfs="mkfs.ext4 -L $1"
 		;;
 	esac
-	# Linux kernel inserts `p' between the whole block device name and the 
-	# partition number if the whole block device name ends with a digit
-	case "$disk" in
-		*[0-9])
-			diskp="$disk"p
-		;;
-		*)
-			diskp="$disk"
-		;;
-	esac
-	eval "$mkfs /dev/$diskp$partnum"
+	if [ "$onlvm" -eq 0 ]; then
+		eval "$mkfs /dev/$diskp$partnum"
+	elif [ "$onlvm" -eq 1 ]; then
+		eval "$mkfs /dev/$vgname/$1"
+	fi
 	[ -d /mnt"$3" ] || mkdir -p /mnt"$3"
 	case "$4" in
 		swap)
@@ -234,8 +236,12 @@ automkfs() {
 	partnum=$((partnum + 1))
 }
 
-# sed -i is not defined by POSIX
-# this is not a fully functional replacement
+chrootvars() {
+	for var in $chrootvars; do
+		printf '%s ' "$var=\"$(eval printf '%s' "\"\$$var\"")\""
+	done
+}
+
 sed_i() {
 	file="$(eval printf '%s' \$"$#")"
 	set -- \
@@ -262,14 +268,8 @@ if [ -z "$1" ]; then
 	netcheck
 	if ! which git > /dev/null 2>&1; then
 		printf '%s\n' 'git(1) not found, installing...'
-		pacman --noconfirm -Sy git || var="$?"
-		if [ "$var" -ne 0 ]; then
-			pkill gpg-agent || true
-			rm -rf /etc/pacman.d/gnupg/*
-			pacman-key --init
-			pacman-key --populate
-			pacman --noconfirm -Sy git
-		fi
+		# Sometimes it takes a few tries...
+		gitinstall || gitinstall
 	fi
 
 	if [ X"$(basename "$PWD")" = X'archdesktop' ]; then
@@ -291,6 +291,16 @@ if [ -z "$1" ]; then
 		lsblk -o NAME,RM,SIZE,TYPE -e 7 | grep -v part
 		userquery disk
 	fi
+	# Linux kernel inserts `p' between the whole block device name and the 
+	# partition number if the whole block device name ends with a digit
+	case "$disk" in
+		*[0-9])
+			diskp="$disk"p
+		;;
+		*)
+			diskp="$disk"
+		;;
+	esac
 	if [ X"$bootmode" = X"efi" ]; then
 		printf '%s\n' 'You are using EFI. Select a configuration:'
 		printf '\t%s\n' 'A) PMBR & Limine bootloader' \
@@ -312,6 +322,15 @@ if [ -z "$1" ]; then
 			;;
 		esac
 	fi
+	userquery uselvm
+	case "$uselvm" in
+		[Nn0]*)
+			uselvm=0
+		;;
+		*)
+			uselvm=1
+		;;
+	esac
 	userquery timezone hostname rootpass user usergecos userpass 
 
 	# Gibibytes of storage available on $drive
@@ -325,8 +344,6 @@ if [ -z "$1" ]; then
 
 	# The whole autosize section needs to be reworked for better numbers
 	# Could not find swap algorithm which took both RAM and storage as input
-	swapmax=$((storage / 16))
-
 	# <max> can be NULL (only with `free')
 	# autosize() <label>   <total|free>  <denominator>     <min>  <max>
 	autosize     rootfs    free          4                 8      32
@@ -336,7 +353,7 @@ if [ -z "$1" ]; then
 	autosize     var       total         32                4      32
 	autosize     vartmp    total         512               1      4
 	autosize     home      free          1                 1      NULL
-	autosize     swap      total         "$ram"            1      "$swapmax"
+	autosize     swap      total         "$ram"            1      16
 	if [ X"$bootmode" = X'efi' ]; then
 	autosize     ESP       total         1024              1      2
 	   _ESP="ESP      $ESPsize      /boot/efi  vfat  rw,noexec,nosuid,nodev 0 2"
@@ -400,7 +417,7 @@ if [ -z "$1" ]; then
 			printf '%s\n' ':'
 			cat /tmp/disk.rej
 		fi
-		printf '\n%s' 'Are these values ok? [y/N] '
+		printf '\n%s' 'Are these values ok? [y/N]: '
 		read REPLY
 		case "$REPLY" in
 			[Yy]*)
@@ -434,16 +451,56 @@ if [ -z "$1" ]; then
 	sectorsize="$(cat /sys/block/"$disk"/queue/hw_sector_size)"
 	sectorspergibi=$((1073741824 / sectorsize))
 
-	sfdisk --delete /dev/"$disk" || true
+	if ! wipefs -a /dev/"$disk"; then
+		# This condition seems to be met when LVMs are already on the system.
+		wipefs -af /dev/"$disk"
+		clear
+		die "$disk is in use but has been wiped anyways. Reboot and run script again."
+	fi
 	partnum=1
-	while read line; do
-		eval "autodisk $line"
-	done < /tmp/disk | sfdisk -X "$disklabel" /dev/"$disk"
+	if [ "$uselvm" -eq 0 ]; then
+		onlvm=0
+		while read line; do
+			eval "autopart $line"
+		done < /tmp/disk | sfdisk -X "$disklabel" /dev/"$disk"
 
-	partnum=1
-	while read line; do
-		eval "automkfs $line"
-	done < /tmp/disk
+		partnum=1
+		while read line; do
+			eval "automkfs $line"
+		done < /tmp/disk
+	elif [ "$uselvm" -eq 1 ]; then
+		grep '\(^boot\|^ESP\)' /tmp/disk | while read line; do
+			eval "autopart $line"
+			# We are running in a subshell and
+			# need to export $partnum out of it
+			printf '%s' "partnum=$partnum" > /tmp/partnum
+		done | sfdisk -X "$disklabel" /dev/"$disk"
+		. /tmp/partnum
+		if [ X"$disklabel" = X'mbr' ]; then
+			# Linux LVM
+			printf '%s\n' ',,8e,-;'
+		elif [ X"$disklabel" = X'gpt' ]; then
+			# Linux LVM
+			printf '%s\n' ',,E6D6D379-F507-44C2-A23C-238F2A3DF928,;'
+		fi | sfdisk -a /dev/"$disk"
+		pvcreate -ffy /dev/"$diskp$partnum"
+		vgcreate "$vgname" /dev/"$diskp$partnum"
+		grep -v '\(^boot\|^ESP\)' /tmp/disk | while read line; do
+			set -- $line
+			lvcreate -y -n "$1" -L "$2"g "$vgname"
+		done
+
+		partnum=1
+		# rootfs must get mounted first
+		onlvm=1
+		grep -v '\(^boot\|^ESP\)' /tmp/disk | while read line; do
+			eval "automkfs $line"
+		done 
+		onlvm=0
+		grep '\(^boot\|^ESP\)' /tmp/disk | while read line; do
+			eval "automkfs $line"
+		done 
+	fi
 
 	sed_i 's/#ParallelDownloads = 5/ParallelDownloads = 8/' /etc/pacman.conf
 	pacman -Sy --noconfirm archlinux-keyring
@@ -460,8 +517,9 @@ if [ -z "$1" ]; then
 	devel_pkgs="$(pacman -Si base-devel | grep 'Depends On' | \
 		cut -d : -f 2 | sed 's/sudo//')"
 	[ -n "$librewolf_addons" ] && browser_pkgs='unzip'
-	[ X"$bootmode" = X'efi' ] && efi_pkgs=efibootmgr
+	[ X"$bootmode" = X'efi' ] && efi_pkgs='efibootmgr'
 	[ X"$bootloader" = X'limine' ] && bootloader_pkgs='limine'
+	[ "$uselvm" -eq 1 ] && lvm_pkgs='lvm2'
 	case "$(lscpu | awk '/^Vendor ID:/ { print $NF }')" in
 		*Intel*)
 			microcode_pkgs=intel-ucode
@@ -475,15 +533,9 @@ if [ -z "$1" ]; then
 	video_drivers_pkgs='xf86-video-fbdev xf86-video-intel xf86-video-vesa'
 	pacstrap /mnt $system_pkgs $network_pkgs $doc_pkgs $gui_pkgs $console_pkgs \
 		$vm_pkgs $devel_pkgs $browser_pkgs $efi_pkgs $bootloader_pkgs \
-		$microcode_pkgs $video_drivers_pkgs $local_pkgs
-	pacstatus="$?"
-	if [ "$pacstatus" -eq 0 ]; then
-		printf '\n%s\n%s\n' 'pacstrap completed!' \
-			'Copying files, git cloning, and making fstab...'
-	else
+		$lvm_pkgs $microcode_pkgs $video_drivers_pkgs $local_pkgs || 
 		die "pacstrap failed with exit $pacstatus." \
 			'Reboot and try script again. Sorry!'
-	fi
 
 	cp "$0" /mnt
 	chmod 740 /mnt/"$(basename $0)"
@@ -502,7 +554,7 @@ if [ -z "$1" ]; then
 	done
 	mkdir /mnt/etc/pacman.d/hooks
 	cp "$gitdir"/etc/pacman.d.hooks/10-fsrw.hook /mnt/etc/pacman.d/hooks
-	cp "$gitdir"/etc/pacman.d.hooks/30-fsro.hook /mnt/etc/pacman.d/hooks
+	cp "$gitdir"/etc/pacman.d.hooks/50-fsro.hook /mnt/etc/pacman.d/hooks
 	[ X"$bootloader" = X'efistub' ] && cp "$gitdir"/linux.bmp \
 		/mnt/usr/share/systemd/bootctl
 	chmod 0400 /mnt/etc/doas.conf
@@ -528,14 +580,6 @@ if [ -z "$1" ]; then
 		'# <filesystem>,<mount>,<type>,<options>,<dump>,<pass>' \
 		> /mnt/etc/fstab
 
-	# cp /tmp/disk /mnt/tmp/disk doesn't work. No idea why.
-	if [ X"$disklabel" = X'mbr' ]; then
-		bootpart="$(awk '$1 ~ /ESP/ { print NR }' /tmp/disk)"
-		if [ "$bootpart" -ge 4 ]; then
-			bootpart=$((bootpart + 1))
-		fi
-	fi
-
 	horizontal="$(cut -d , -f 1 "$(find /sys -name virtual_size 2> /dev/null | \
 		head -n 1)")"
 	vertical="$(cut -d , -f 2 "$(find /sys -name virtual_size 2> /dev/null | \
@@ -560,7 +604,7 @@ elif [ X"$1" = X'chroot' ]; then
 	printf '%s\n' 'Chroot entered successfully!'
 
 	netcheck
-
+	
 	if [ -n "$force_dns" ]; then
 		dnsconf='/etc/NetworkManager/conf.d/dns-servers.conf'
 		printf '%s\n%s' '[global-dns-domain-*]' 'servers=' > "$dnsconf"
@@ -705,10 +749,12 @@ elif [ X"$1" = X'chroot' ]; then
 		make install
 	done
 
+	ESPnum="$(findmnt /boot/efi -o SOURCE | tail -n 1 | sed "s/\/dev\/$diskp//")"
+
 	if [ X"$bootmode" = X'efi' ]; then
 		curl -Lo /boot/efi/shellx64.efi \
 			'https://github.com/tianocore/edk2/raw/UDK2018/ShellBinPkg/UefiShell/X64/Shell.efi'
-		efibootmgr -c -d /dev/"$disk" -p "$bootpart" -l '\shellx64.efi' \
+		efibootmgr -c -d /dev/"$disk" -p "$ESPnum" -l '\shellx64.efi' \
 			-L 'EFI Shell'
 	fi
 
@@ -718,48 +764,77 @@ elif [ X"$1" = X'chroot' ]; then
 	printf '%s\n' 'compress="cat"' > /etc/dracut.conf
 	[ X"$bootmode" = X'efi' ] && mkdir -p /boot/efi/EFI/Linux/
 	if [ X"$bootloader" = X'limine' ]; then
+		cat <<- EOF > /etc/pacman.d/hooks/20-bootloader.hook
+		[Trigger]
+		Type = Package
+		Operation = Upgrade
+		Target = limine
+		
+		EOF
 		if [ X"$bootmode" = X'bios' ]; then
 			cp /usr/share/limine/limine-bios.sys /boot
 			limine bios-install /dev/"$disk"
+			cat <<- EOF >> /etc/pacman.d/hooks/20-bootloader.conf
+			[Action]
+			Description = Deploying bootloader files to /boot...
+			When = PostTransaction
+			Exec = /bin/sh -c "limine bios-install /dev/$disk; cp /usr/share/limine/limine-bios.sys /boot/limine-bios.sys"
+			EOF
 		elif [ X"$bootmode" = X'efi' ]; then
 			cp /usr/share/limine/BOOTX64.EFI \
 				/boot/efi/EFI/Linux/BOOTX64.EFI
-			efibootmgr -c -d /dev/"$disk" -p "$bootpart" \
+			efibootmgr -c -d /dev/"$disk" -p "$ESPnum" \
 				-l '\EFI\Linux\BOOTX64.EFI'
+			cat <<- EOF >> /etc/pacman.d/hooks/20-bootloader.conf
+			[Action]
+			Description = Deploying bootloader files to ESP...
+			When = PostTransaction
+			Exec = /usr/bin/cp /usr/share/limine/BOOTX64.EFI /boot/efi/EFI/Linux/BOOTX64.EFI
+			EOF
 		fi
 		cat <<- EOF > /boot/limine.cfg
 		:Linux
-			KERNEL_PATH=boot:///linux
-			MODULE_PATH=boot:///initramfs.img
-			CMDLINE=$kernelcmdline
-			TERM_FONT_SCALE=2x2
-			PROTOCOL=linux
+		        KERNEL_PATH=boot:///linux
+		        MODULE_PATH=boot:///initramfs.img
+		        CMDLINE=$kernelcmdline
+		        TERM_FONT_SCALE=2x2
+		        PROTOCOL=linux
 		EOF
 		main='/boot/initramfs.img'
 		fallback='/boot/fallback.img'
 	elif [ X"$bootloader" = X'efistub' ]; then
 		printf '%s\n' "kernel_cmdline=\"$kernelcmdline\"" \
-			> /etc/dracut.conf
+			>> /etc/dracut.conf
 		printf '%s\n' 'uefi="yes"' \
 			'uefi_splash_image="/usr/share/systemd/bootctl/linux.bmp"' \
 			>> /etc/dracut.conf
-		efibootmgr -c -d /dev/"$disk" -p "$bootpart" \
-			-l '\EFI\Linux\linux.efi'
+		efibootmgr -c -d /dev/"$disk" -p "$ESPnum" -l '\EFI\Linux\linux.efi'
 		main='/boot/efi/EFI/Linux/linux.efi'
 		fallback='/boot/efi/EFI/Linux/fallback.efi'
 	fi
 	dracut --hostonly --kver "$kver" "$main"
 	dracut --kver "$kver" "$fallback"
-	cat <<- EOF > /etc/pacman.d/hooks/20-initramfs.hook
+	cat <<- EOF > /etc/pacman.d/hooks/30-cpkernel.hook
+	[Trigger]
+	Type = Package
+	Operation = Upgrade
+	Target = linux
+	
+	[Action]
+	Description = Copying kernel to /boot...
+	When = PostTransaction
+	Exec = /bin/sh -c "kver=\$(find /usr/lib/modules/*/vmlinuz | cut -d / -f 5 | sort -u | tail -n 1); cp /usr/lib/modules/"\$kver"/vmlinuz /boot/linux"
+	EOF
+	cat <<- EOF > /etc/pacman.d/hooks/40-initramfs.hook
 	[Trigger]
 	Type = Package
 	Operation = Upgrade
 	Target = linux*
 	
 	[Action]
-	Description = Copying kernel to /boot and generating initramfs...
+	Description = Generating initramfs...
 	When = PostTransaction
-	Exec = /bin/sh -c "kver=\$(find /usr/lib/modules/*/vmlinuz | cut -d / -f 5 | sort -u | tail -n 1); cp /usr/lib/modules/"\$kver"/vmlinuz /boot/linux; dracut --force --kver=\$kver --hostonly $main; dracut --force --kver=\$kver $fallback"
+	Exec = /bin/sh -c "kver=\$(find '/usr/lib/modules/*/vmlinuz' | cut -d / -f 5 | sort -u | tail -n 1); dracut --force --kver=\$kver --hostonly $main; dracut --force --kver=\$kver $fallback"
 	EOF
 
 	mkdir -p /etc/systemd/system/tmp.mount.d
